@@ -213,7 +213,11 @@
                     if (popupPending) {
                         e.preventDefault();
                         pendingNav = {
-                            fn: u => { bypassNext = true; origAssign.call(location, u); },
+                            fn: u => {
+                                bypassNext = true;
+                                if (origAssign) origAssign.call(location, u);
+                                else location.href = u;
+                            },
                             url: e.destination.url
                         };
                     }
