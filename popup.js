@@ -179,7 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') addToNavBlock(e.target.value);
     };
 
-    // Collapsible sections
     document.querySelectorAll('.section-header').forEach(header => {
         header.addEventListener('click', () => {
             header.closest('.section').classList.toggle('open');

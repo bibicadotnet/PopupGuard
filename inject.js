@@ -35,14 +35,20 @@
 
     let popupPending = false;
     let siteHasAds = false;
+    let pendingNav = null;
+    let lastMousedownPos = null;
+    let isReplayingClick = false;
     const origPlay = HTMLMediaElement.prototype.play;
 
+    document.addEventListener('mousedown', e => {
+        if (e.isTrusted && !isReplayingClick) {
+            lastMousedownPos = { x: e.clientX, y: e.clientY };
+        }
+    }, true);
+
     const freezePage = () => {
-        // Block all media play calls
         HTMLMediaElement.prototype.play = function() { return Promise.resolve(); };
-        // Pause all currently playing media
         document.querySelectorAll('video, audio').forEach(m => { if (!m.paused) m.pause(); });
-        // Freeze CSS animations
         const style = document.createElement('style');
         style.id = 'nmt-freeze';
         style.textContent = '*, *::before, *::after { animation-play-state: paused !important; transition: none !important; }';
@@ -73,16 +79,64 @@
         if (e.data?.action === 'NMT_DIALOG_CLOSED') {
             popupPending = false;
             unfreezePage();
+            if (pendingNav) {
+                const { fn, url } = pendingNav;
+                pendingNav = null;
+                fn(url);
+            }
         }
     });
 
+    const replayClickAfterBlock = () => {
+        if (!lastMousedownPos || isReplayingClick) return;
+        const { x, y } = lastMousedownPos;
+        lastMousedownPos = null;
+
+        setTimeout(() => {
+            const el = document.elementFromPoint(x, y);
+            if (!el || el === document.body || el === document.documentElement) return;
+
+            const a = el.closest('a[href]');
+            if (a) {
+                try {
+                    const dest = new URL(a.href, location.href);
+                    if (dest.origin === location.origin && origAssign) {
+                        origAssign.call(location, a.href);
+                        return;
+                    }
+                } catch (_) {}
+            }
+
+            isReplayingClick = true;
+            el.dispatchEvent(new MouseEvent('click', {
+                bubbles: true, cancelable: true,
+                clientX: x, clientY: y, view: window
+            }));
+            isReplayingClick = false;
+        }, 50);
+    };
+
     const originalOpen = window.open;
+
+    const fakeWindow = Object.freeze({
+        closed: true,
+        name: '',
+        close()  {},
+        focus()  {},
+        blur()   {},
+        postMessage() {},
+        location: Object.freeze({ href: 'about:blank', assign() {}, replace() {} }),
+    });
 
     const interceptedOpen = function (url, name, specs) {
         const targetUrl = url || 'about:blank';
         const action = getPopupAction();
-        if (action === 'BLOCK') { siteHasAds = true; return null; }
-        if (action === 'ASK') { siteHasAds = true; askPopup(targetUrl, name, specs); return null; }
+        if (action === 'BLOCK') {
+            siteHasAds = true;
+            if (!isReplayingClick) replayClickAfterBlock();
+            return fakeWindow;
+        }
+        if (action === 'ASK')   { siteHasAds = true; askPopup(targetUrl, name, specs); return fakeWindow; }
         return originalOpen.call(window, url, name, specs);
     };
 
@@ -102,7 +156,11 @@
         try {
             const dest = new URL(url, location.href);
             if (dest.origin === location.origin) {
-                if (!popupPending) doNavigate(url);
+                if (!popupPending) {
+                    doNavigate(url);
+                } else {
+                    pendingNav = { fn: doNavigate, url };
+                }
                 return;
             }
         } catch (e) { doNavigate(url); return; }
@@ -152,7 +210,13 @@
             try {
                 const dest = new URL(e.destination.url);
                 if (dest.origin === location.origin) {
-                    if (popupPending) e.preventDefault();
+                    if (popupPending) {
+                        e.preventDefault();
+                        pendingNav = {
+                            fn: u => { bypassNext = true; origAssign.call(location, u); },
+                            url: e.destination.url
+                        };
+                    }
                     return;
                 }
             } catch (_) { return; }
@@ -178,7 +242,6 @@
         const a = e.composedPath().find(el => el.tagName === 'A');
         if (!a || !a.href) return;
 
-        // Check destination blocklist
         const navAction = getNavAction(a.href);
         if (navAction === 'BLOCK') {
             e.preventDefault();
@@ -187,7 +250,6 @@
             return;
         }
 
-        // Check if link opens a new tab
         const t = (a.target || '').toLowerCase();
         const isNewTab = t === '_blank' || t === '_new'
             || (t !== '' && t !== '_self' && t !== '_top' && t !== '_parent');
