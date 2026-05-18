@@ -2,41 +2,44 @@
 
 **[🇬🇧 English](README.md)**
 
-![srvMVjnP](https://img.bibica.net/srvMVjnP.png)
+![NoMoreTabs Banner](https://img.bibica.net/srvMVjnP.png)
 
-Tiện ích mở rộng trình duyệt giúp chặn các tab và popup không mong muốn.
+Browser extension giúp chặn các tab mới, popup và tự động chuyển hướng ngoài ý muốn.
 
 ## Cách hoạt động
-Khi một trang web cố mở tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại sẽ hiện ra ngay trong tab hiện tại.
+Khi một trang web cố mở tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại xác nhận sẽ hiện ra ngay trong tab hiện tại.
 
 ### Nút hành động
-- **Allow this time** (xanh lá) — Cho phép yêu cầu này một lần. Không lưu quy tắc nào.
-- **Block this time** (đỏ) — Chặn yêu cầu này một lần. Không lưu quy tắc nào.
+* **Allow this time** (xanh lá): Cho phép yêu cầu này một lần.
+* **Block this time** (đỏ): Chặn yêu cầu này một lần.
 
-### Checkbox
-Checkbox lưu quy tắc vĩnh viễn. Khi chọn checkbox, nút ngược lại sẽ tự động bị tắt:
+### Checkbox (Lưu quy tắc vĩnh viễn)
+Khi chọn một checkbox, nút hành động ngược lại sẽ tự động bị tắt:
+* **Always allow [nguồn] to open new tabs**: Tự động cho phép mọi yêu cầu mở tab/popup từ trang này trong tương lai. (Tự động tắt nút *Block this time*).
+* **Always block [nguồn] from opening new tabs**: Tự động chặn mọi yêu cầu mở tab/popup từ trang này trong tương lai mà không cần hỏi. (Tự động tắt nút *Allow this time*).
+* **Block all network requests to [đích]**: Chặn hoàn toàn tất cả request (script, ảnh, iframe, v.v.) đến tên miền đích ở tầng mạng (declarativeNetRequest). Hộp thoại chỉ hiển thị checkbox này khi tên miền đích khác tên miền nguồn. Nếu chọn, trang sẽ tự động tải lại sau khi ấn **Block this time**. *(Các domain thuộc danh sách mặc định như shopee.vn, tiktok.com... sẽ tự động được bỏ qua).*
 
-- **Always allow [nguồn] to open new tabs** — Các lần truy cập từ tên miền này trong tương lai sẽ được tự động cho phép. Tắt nút **Block this time**.
-- **Always block [nguồn] from opening new tabs** — Các lần truy cập từ tên miền này trong tương lai sẽ bị chặn mà không cần hỏi. Tắt nút **Allow this time**.
-- **Block all network requests to [đích]** — Tất cả request đến tên miền này (script, ảnh, iframe, v.v.) sẽ bị chặn ở tầng mạng. Trang tự động tải lại. Tắt nút **Allow this time**. *(Chỉ hiện khi tên miền đích khác tên miền nguồn.)*
+---
 
-### Popup tiện ích
-Nhấn vào biểu tượng tiện ích để quản lý danh sách thủ công:
+## Popup tiện ích
+Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý thủ công:
 
-- **🚫 Block popups from domain** — Tên miền nguồn không được phép mở tab mới.
-- **✅ Allow popups from domain** — Tên miền nguồn được phép mở tab mới tự do.
-- **🔗 Block navigation to domain** — Tên miền đích bị chặn ở tầng mạng (tất cả loại tài nguyên).
+* **Thẻ trạng thái động**: Tự động nhận diện tên miền hiện tại đang chặn hay mở (Blocked, Allowed, Network, Default hoặc No rule), cần thay đổi gì thì click trực tiếp vào nút tương ứng (Block, Allow, Clear) để lưu cấu hình cực nhanh.
+* **Các tab quản lý trực quan**:
+  * **All**: Tất cả quy tắc tự thiết lập + danh sách mặc định.
+  * **Blocked**: Tên miền nguồn bị chặn popup (`popupBlock`).
+  * **Allowed**: Tên miền nguồn được cho phép (`popupAllow`).
+  * **Network**: Tên miền đích bị chặn ở tầng mạng (`navBlock`).
+  * **Default**: Danh sách trắng mặc định (`allowlist.json`), gồm các tên miền uy tín (Google, Facebook, ngân hàng...) luôn được phép và không thể chặn để tránh lỗi trang.
+* **Nhập thủ công**: Hỗ trợ tên miền thường `example.com` và wildcard `*.example.com`.
+* Nhìn chung, bạn chỉ cần quản lý theo thông báo hiển thị khi duyệt web là đủ. Khi nào lỡ thêm hoặc chặn nhầm domain thì mới cần vào popup chỉnh lại. Tiện ích có sẵn thanh tìm kiếm nên thao tác rất nhanh, không phức tạp.
 
-Hỗ trợ wildcard `*.example.com`. Khi thêm tên miền vào một danh sách, nó sẽ tự động bị xóa khỏi hai danh sách còn lại.
-
-### Danh sách cho phép mặc định
-`allowlist.json` chứa các tên miền uy tín (Google, Facebook, ngân hàng, v.v.) luôn được phép và không thể thêm vào danh sách chặn qua giao diện.
-
-### Đồng bộ
-Mọi thay đổi được đồng bộ ngay lập tức trên tất cả các tab đang mở qua `chrome.storage.sync`.
+---
 
 ## Cài đặt
-1. Tải và giải nén **[NoMoreTabs.zip](https://github.com/bibicadotnet/NoMoreTabs/releases/latest/download/NoMoreTabs.zip)**.
-2. Mở `chrome://extensions/` trong trình duyệt.
-3. Bật **Developer mode** (Chế độ nhà phát triển).
-4. Nhấn **Load unpacked** (Tải tiện ích đã giải nén) và chọn thư mục vừa giải nén.
+1. Tải xuống và giải nén **[NoMoreTabs.zip](https://github.com/bibicadotnet/NoMoreTabs/releases/latest/download/NoMoreTabs.zip)**.
+2. Mở `chrome://extensions/` trong trình duyệt của bạn.
+3. Bật **Chế độ nhà phát triển** (Developer mode).
+4. Nhấp vào **Load unpacked** và chọn thư mục đã giải nén.
+
+*Lưu ý: Tiện ích này cần cài đặt thủ công (không có trên Chrome Web Store vì phí đăng ký tài khoản tốn $5 :]])*
