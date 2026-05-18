@@ -31,7 +31,7 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
 
     const container = document.createElement("div");
     container.id = "nmt-container";
-    container.style.cssText = "position:fixed;top:0;left:0;z-index:2147483647;width:0;height:0;";
+    container.style.cssText = "position:fixed !important;top:0 !important;left:0 !important;z-index:2147483647 !important;width:0 !important;height:0 !important;display:block !important;";
     document.body.appendChild(container);
 
     const shadow = container.attachShadow({ mode: "open" });
@@ -108,7 +108,7 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const btnBlock = shadow.getElementById("btn-block");
 
     const updateButtons = () => {
-        const blocking = cbBlock.checked || cbDest.checked;
+        const blocking = cbBlock.checked;
         const allowing = cbAllow.checked;
         btnOpen.disabled = blocking;
         btnOpen.style.opacity = blocking ? '0.4' : '1';

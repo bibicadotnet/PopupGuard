@@ -23,7 +23,6 @@ const syncNetworkRules = async () => {
             const escaped = domain.replace(/\./g, '\\.');
             condition = {
                 regexFilter: `^https?://${escaped}([/?:#]|$)`,
-                isUrlFilterCaseSensitive: false,
                 resourceTypes
             };
         }

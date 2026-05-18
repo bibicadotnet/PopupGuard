@@ -97,7 +97,7 @@ function renderAll() {
             builtinList.forEach(d => items.push({ domain: d, type: 'builtin' }));
 
             // Update tab counts
-            document.getElementById('count-all').textContent = pbl.length + pal.length + nbl.length;
+            document.getElementById('count-all').textContent = pbl.length + pal.length + nbl.length + builtinList.length;
             document.getElementById('count-block').textContent = pbl.length;
             document.getElementById('count-allow').textContent = pal.length;
             document.getElementById('count-nav').textContent = nbl.length;
@@ -206,12 +206,21 @@ function makeActionBtn(label, onClick) {
     return btn;
 }
 
+const filterRule = (list, host) => (list || []).filter(x => {
+    if (x === host) return false;
+    if (x.startsWith('*.')) {
+        const base = x.slice(2);
+        if (host === base || host.endsWith('.' + base)) return false;
+    }
+    return true;
+});
+
 function clearHostRules() {
-    chrome.storage.sync.get(['popupBlock', 'popupAllow'], data => {
+    chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], data => {
         chrome.storage.sync.set({
-            popupBlock: (data.popupBlock || []).filter(x => x !== currentHost),
-            popupAllow: (data.popupAllow || []).filter(x => x !== currentHost),
-            navBlock: (data.navBlock || []).filter(x => x !== currentHost)
+            popupBlock: filterRule(data.popupBlock, currentHost),
+            popupAllow: filterRule(data.popupAllow, currentHost),
+            navBlock:   filterRule(data.navBlock,   currentHost)
         }, renderAll);
     });
 }
@@ -222,9 +231,9 @@ function updateStatusCard(pbl, pal, nbl) {
     const actions = document.getElementById('status-actions');
 
     const isBuiltin = isDomainInList(currentHost, staticAllowlist);
-    const isBlocked = pbl.includes(currentHost);
-    const isAllowed = pal.includes(currentHost);
-    const isNavBlock = nbl.includes(currentHost);
+    const isBlocked = isDomainInList(currentHost, pbl);
+    const isAllowed = isDomainInList(currentHost, pal);
+    const isNavBlock = isDomainInList(currentHost, nbl);
 
     actions.innerHTML = '';
 

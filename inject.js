@@ -16,8 +16,14 @@
         try {
             topHost = new URL(window.top.location.href).hostname.toLowerCase();
         } catch (e) {
-            return 'ASK';
+            if (window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) {
+                try {
+                    topHost = new URL(window.location.ancestorOrigins[window.location.ancestorOrigins.length - 1]).hostname.toLowerCase();
+                } catch (err) { }
+            }
         }
+
+        if (!topHost) return 'ASK';
 
         if (checkMatch(topHost, pal)) return 'ALLOW';
         if (checkMatch(topHost, pbl)) return 'BLOCK';
@@ -47,7 +53,8 @@
     }, true);
 
     const freezePage = () => {
-        HTMLMediaElement.prototype.play = function() { return Promise.resolve(); };
+        if (document.getElementById('nmt-freeze')) return;
+        HTMLMediaElement.prototype.play = function () { return Promise.resolve(); };
         document.querySelectorAll('video, audio').forEach(m => { if (!m.paused) m.pause(); });
         const style = document.createElement('style');
         style.id = 'nmt-freeze';
@@ -87,12 +94,19 @@
         }
     });
 
+    let replayTimeoutId = null;
+
+    document.addEventListener('click', e => {
+        if (e.isTrusted && !isReplayingClick) clearTimeout(replayTimeoutId);
+    }, true);
+
     const replayClickAfterBlock = () => {
         if (!lastMousedownPos || isReplayingClick) return;
         const { x, y } = lastMousedownPos;
         lastMousedownPos = null;
 
-        setTimeout(() => {
+        clearTimeout(replayTimeoutId);
+        replayTimeoutId = setTimeout(() => {
             const el = document.elementFromPoint(x, y);
             if (!el || el === document.body || el === document.documentElement) return;
 
@@ -104,7 +118,7 @@
                         origAssign.call(location, a.href);
                         return;
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
 
             isReplayingClick = true;
@@ -113,7 +127,7 @@
                 clientX: x, clientY: y, view: window
             }));
             isReplayingClick = false;
-        }, 50);
+        }, 100);
     };
 
     const originalOpen = window.open;
@@ -121,11 +135,11 @@
     const fakeWindow = Object.freeze({
         closed: true,
         name: '',
-        close()  {},
-        focus()  {},
-        blur()   {},
-        postMessage() {},
-        location: Object.freeze({ href: 'about:blank', assign() {}, replace() {} }),
+        close() { },
+        focus() { },
+        blur() { },
+        postMessage() { },
+        location: Object.freeze({ href: 'about:blank', assign() { }, replace() { } }),
     });
 
     const interceptedOpen = function (url, name, specs) {
@@ -136,7 +150,7 @@
             if (!isReplayingClick) replayClickAfterBlock();
             return fakeWindow;
         }
-        if (action === 'ASK')   { siteHasAds = true; askPopup(targetUrl, name, specs); return fakeWindow; }
+        if (action === 'ASK') { siteHasAds = true; askPopup(targetUrl, name, specs); return fakeWindow; }
         return originalOpen.call(window, url, name, specs);
     };
 
@@ -168,7 +182,7 @@
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
         if (action === 'BLOCK') return;
-        askPopup(url, '_self', '');
+        askPopup(url, '_self', '', true);
     };
 
     const locProto = Location.prototype;
