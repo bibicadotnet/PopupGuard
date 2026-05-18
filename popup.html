@@ -18,6 +18,7 @@
       font-size: 13px;
     }
 
+    /* ── Header ── */
     .header {
       display: flex;
       align-items: center;
@@ -35,119 +36,274 @@
     .header h1 {
       font-size: 14px;
       font-weight: 700;
+      flex: 1;
     }
 
-    .quick {
+    .header-version {
+      font-size: 11px;
+      opacity: 0.55;
+      font-weight: 400;
+    }
+
+    .header-home {
+      display: flex;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+    }
+
+    .header-home:hover {
+      opacity: 1;
+    }
+
+    .header-home svg {
+      width: 18px;
+      height: 18px;
+      fill: #fff;
+    }
+
+    /* ── Status Card ── */
+    .status-card {
       padding: 12px 16px;
       border-bottom: 1px solid #e2e8f0;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
     }
 
-    .quick button {
-      display: none;
-      padding: 7px 12px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      text-align: left;
+    .status-domain {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    #quick-popup-block {
-      background: #fee2e2;
-      color: #b91c1c;
-    }
-
-    #quick-popup-allow {
-      background: #dcfce7;
-      color: #15803d;
-    }
-
-    .quick button:hover {
-      filter: brightness(0.95);
-    }
-
-    .section {
-      border-bottom: 1px solid #e2e8f0;
-    }
-
-    .section:last-of-type {
-      border-bottom: none;
-    }
-
-    .section-header {
+    .status-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      cursor: pointer;
-      user-select: none;
+      gap: 8px;
     }
 
-    .section-header:hover {
-      background: #f1f5f9;
+    .status-badge {
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
 
-    .section-title {
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-badge.s-blocked { color: #dc2626; }
+    .status-badge.s-blocked .dot { background: #dc2626; }
+    .status-badge.s-allowed { color: #16a34a; }
+    .status-badge.s-allowed .dot { background: #16a34a; }
+    .status-badge.s-builtin { color: #7c3aed; }
+    .status-badge.s-builtin .dot { background: #7c3aed; }
+    .status-badge.s-norule  { color: #94a3b8; }
+    .status-badge.s-norule .dot { background: #94a3b8; }
+
+    .status-spacer {
+      flex: 1;
+    }
+
+    .status-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .status-actions button {
+      background: none;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 2px 8px;
       font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
+      font-weight: 500;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .status-actions button:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+
+    .status-hidden {
+      display: none;
+    }
+
+    /* ── Filter Tabs ── */
+    .tabs {
+      display: flex;
+      padding: 10px 16px 0;
+      gap: 2px;
+    }
+
+    .tab {
+      padding: 6px 10px;
+      border: none;
+      background: none;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .tab:hover {
       color: #64748b;
     }
 
-    .section-meta {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    .tab.active {
+      color: #1e293b;
+      border-bottom-color: #1e293b;
     }
 
-    .section-count {
+    .tab .tab-count {
       font-size: 10px;
       font-weight: 700;
       background: #e2e8f0;
       color: #64748b;
-      padding: 1px 6px;
-      border-radius: 10px;
-      min-width: 18px;
+      padding: 0 5px;
+      border-radius: 8px;
+      margin-left: 3px;
+    }
+
+    .tab.active .tab-count {
+      background: #1e293b;
+      color: #fff;
+    }
+
+    /* ── Search ── */
+    .search-row {
+      padding: 8px 16px;
+    }
+
+    .search-row input {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      background: #fff;
+    }
+
+    .search-row input:focus {
+      border-color: #94a3b8;
+    }
+
+    /* ── Domain List ── */
+    .domain-list {
+      padding: 0 16px 6px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .domain-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .domain-list::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 2px;
+    }
+
+    .domain-row {
+      display: flex;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+      gap: 8px;
+    }
+
+    .domain-row:last-child {
+      border-bottom: none;
+    }
+
+    .domain-name {
+      flex: 1;
+      font-size: 12px;
+      color: #334155;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .domain-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tag-block {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .tag-allow {
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    .tag-nav {
+      background: #ffedd5;
+      color: #ea580c;
+    }
+
+    .tag-builtin {
+      background: #ede9fe;
+      color: #7c3aed;
+    }
+
+    .domain-x {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: color 0.15s;
+    }
+
+    .domain-x:hover {
+      color: #ef4444;
+    }
+
+    .empty-msg {
+      font-size: 12px;
+      color: #94a3b8;
+      padding: 12px 0;
       text-align: center;
     }
 
-    .count-red { background: #fee2e2; color: #dc2626; }
-    .count-green { background: #dcfce7; color: #16a34a; }
-    .count-orange { background: #ffedd5; color: #ea580c; }
-
-    .section-arrow {
-      font-size: 10px;
-      color: #94a3b8;
-      transition: transform 0.2s;
-    }
-
-    .section.open .section-arrow {
-      transform: rotate(180deg);
-    }
-
-    .section-body {
-      display: none;
-      padding: 0 16px 12px;
-    }
-
-    .section.open .section-body {
-      display: block;
-    }
-
-    .add-row {
+    /* ── Add Row ── */
+    .add-section {
+      padding: 8px 16px 14px;
+      border-top: 1px solid #e2e8f0;
       display: flex;
       gap: 6px;
-      margin-bottom: 8px;
     }
 
-    .add-row input {
+    .add-section.hidden {
+      display: none;
+    }
+
+    .add-section input {
       flex: 1;
-      padding: 6px 9px;
+      padding: 7px 10px;
       border: 1px solid #cbd5e1;
       border-radius: 6px;
       font-size: 12px;
@@ -155,12 +311,24 @@
       background: #fff;
     }
 
-    .add-row input:focus {
+    .add-section input:focus {
       border-color: #94a3b8;
     }
 
-    .add-row button {
-      padding: 6px 10px;
+    .add-section select {
+      padding: 7px 6px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #fff;
+      color: #334155;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .add-section button {
+      padding: 7px 12px;
       border: none;
       border-radius: 6px;
       background: #1e293b;
@@ -170,55 +338,11 @@
       cursor: pointer;
     }
 
-    .add-row button:hover {
+    .add-section button:hover {
       background: #0f172a;
     }
 
-    .chip-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-    }
-
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: #e2e8f0;
-      color: #334155;
-      font-size: 11px;
-      padding: 3px 6px 3px 8px;
-      border-radius: 12px;
-      max-width: 100%;
-    }
-
-    .chip-host {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .chip-x {
-      background: none;
-      border: none;
-      color: #94a3b8;
-      font-size: 13px;
-      cursor: pointer;
-      padding: 0 2px;
-      line-height: 1;
-      flex-shrink: 0;
-    }
-
-    .chip-x:hover {
-      color: #ef4444;
-    }
-
-    .empty-msg {
-      font-size: 12px;
-      color: #94a3b8;
-      padding: 2px 0;
-    }
-
+    /* ── Toast ── */
     #toast {
       position: fixed;
       bottom: 10px;
@@ -246,66 +370,44 @@
 
   <div class="header">
     <img src="app_icon_128.png">
-    <h1>NoMoreTabs</h1>
+    <h1>NoMoreTabs <span class="header-version" id="ext-version"></span></h1>
+    <a class="header-home" href="https://github.com/bibicadotnet/NoMoreTabs" target="_blank" title="GitHub">
+      <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
   </div>
 
-  <div class="quick">
-    <button id="quick-popup-block"></button>
-    <button id="quick-popup-allow"></button>
-  </div>
-
-  <div class="section" id="sec-popup-block">
-    <div class="section-header" data-toggle="sec-popup-block">
-      <span class="section-title">🚫 Block popups from domain</span>
-      <span class="section-meta">
-        <span class="section-count count-red" id="count-popup-block">0</span>
-        <span class="section-arrow">▼</span>
-      </span>
-    </div>
-    <div class="section-body">
-      <div class="add-row">
-        <input id="new-popup-block" placeholder="example.com or *.example.com" type="text">
-        <button id="add-popup-block-btn">+</button>
-      </div>
-      <div class="chip-list" id="popup-blocklist"></div>
-      <p id="empty-popup-block-msg" class="empty-msg" style="display:none">No domains added yet</p>
+  <div class="status-card status-hidden" id="status-card">
+    <div class="status-domain" id="status-host"></div>
+    <div class="status-row">
+      <span class="status-badge" id="status-badge"></span>
+      <span class="status-spacer"></span>
+      <span class="status-actions" id="status-actions"></span>
     </div>
   </div>
 
-  <div class="section" id="sec-popup-allow">
-    <div class="section-header" data-toggle="sec-popup-allow">
-      <span class="section-title">✅ Allow popups from domain</span>
-      <span class="section-meta">
-        <span class="section-count count-green" id="count-popup-allow">0</span>
-        <span class="section-arrow">▼</span>
-      </span>
-    </div>
-    <div class="section-body">
-      <div class="add-row">
-        <input id="new-popup-allow" placeholder="example.com or *.example.com" type="text">
-        <button id="add-popup-allow-btn">+</button>
-      </div>
-      <div class="chip-list" id="popup-allowlist"></div>
-      <p id="empty-popup-allow-msg" class="empty-msg" style="display:none">No domains added yet</p>
-    </div>
+  <div class="tabs">
+    <button class="tab active" data-filter="all" title="All custom rules you've added">All <span class="tab-count" id="count-all">0</span></button>
+    <button class="tab" data-filter="popupBlock" title="Domains whose popups are always blocked">Blocked <span class="tab-count" id="count-block">0</span></button>
+    <button class="tab" data-filter="popupAllow" title="Domains whose popups are always allowed">Allowed <span class="tab-count" id="count-allow">0</span></button>
+    <button class="tab" data-filter="navBlock" title="Block all network requests to these domains (scripts, images, etc.)">Network <span class="tab-count" id="count-nav">0</span></button>
+    <button class="tab" data-filter="builtin" title="Pre-configured safe domains that are always allowed">Default <span class="tab-count" id="count-builtin">0</span></button>
   </div>
 
-  <div class="section" id="sec-nav-block">
-    <div class="section-header" data-toggle="sec-nav-block">
-      <span class="section-title">🔗 Block navigation to domain</span>
-      <span class="section-meta">
-        <span class="section-count count-orange" id="count-nav-block">0</span>
-        <span class="section-arrow">▼</span>
-      </span>
-    </div>
-    <div class="section-body">
-      <div class="add-row">
-        <input id="new-nav-block" placeholder="adsite.com or *.adsite.com" type="text">
-        <button id="add-nav-block-btn">+</button>
-      </div>
-      <div class="chip-list" id="nav-blocklist"></div>
-      <p id="empty-nav-block-msg" class="empty-msg" style="display:none">No domains added yet</p>
-    </div>
+  <div class="search-row">
+    <input type="text" id="search-input" placeholder="Search domains...">
+  </div>
+
+  <div class="domain-list" id="domain-list"></div>
+  <p class="empty-msg" id="empty-msg" style="display:none">No domains found</p>
+
+  <div class="add-section" id="add-section">
+    <input type="text" id="new-domain" placeholder="example.com or *.example.com">
+    <select id="new-type">
+      <option value="popupBlock">Block</option>
+      <option value="popupAllow">Allow</option>
+      <option value="navBlock">Network</option>
+    </select>
+    <button id="add-btn">+</button>
   </div>
 
   <div id="toast"></div>

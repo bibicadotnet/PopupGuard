@@ -1,7 +1,7 @@
 {
    "key": "bjegjncgcmfalgmgempjllgliomifdoo",
    "name": "NoMoreTabs",
-   "version": "1.3",
+   "version": "1.4",
    "manifest_version": 3,
    "description": "Stop websites from opening unwanted new tabs. Action-based protection.",
    "icons": {

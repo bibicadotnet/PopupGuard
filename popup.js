@@ -1,7 +1,11 @@
 "use strict";
 
-var staticAllowlist = [], staticLoaded = false;
+var staticAllowlist = [];
+var staticLoaded = false;
+var currentFilter = 'all';
+var searchQuery = '';
 var toastTimer = 0;
+
 function showToast(msg) {
     const el = document.getElementById('toast');
     el.textContent = msg;
@@ -27,7 +31,7 @@ function getHostname(t) {
             return '*.' + base;
         }
         return new URL(t.includes("http") ? t : "http://" + t).hostname;
-    } catch(e) { return null; }
+    } catch (e) { return null; }
 }
 
 function isDomainInList(domain, list) {
@@ -40,148 +44,262 @@ function isDomainInList(domain, list) {
     });
 }
 
-function renderList(storageKey, listId, emptyId, countId, onRemove) {
-    chrome.storage.sync.get([storageKey], data => {
-        const items = data[storageKey] || [];
-        const container = document.getElementById(listId);
-        const em = document.getElementById(emptyId);
-        const badge = document.getElementById(countId);
-        container.innerHTML = '';
-        badge.textContent = items.length;
-        if (items.length === 0) { em.style.display = 'block'; return; }
-        em.style.display = 'none';
-        items.forEach(item => {
-            const chip = document.createElement('span');
-            chip.className = 'chip';
-            const host = document.createElement('span');
-            host.className = 'chip-host';
-            host.textContent = item;
-            const btn = document.createElement('button');
-            btn.className = 'chip-x';
-            btn.title = 'Remove';
-            btn.textContent = '\u00d7';
-            btn.addEventListener('click', () => onRemove(item));
-            chip.appendChild(host);
-            chip.appendChild(btn);
-            container.appendChild(chip);
+// ── Tag labels ──
+
+const TAG_CONFIG = {
+    popupBlock: { cls: 'tag-block', label: 'Blocked' },
+    popupAllow: { cls: 'tag-allow', label: 'Allowed' },
+    navBlock:   { cls: 'tag-nav',   label: 'Network' },
+    builtin:    { cls: 'tag-builtin', label: 'Default' }
+};
+
+// ── Filter → add-section sync ──
+
+const FILTER_TO_TYPE = {
+    all: 'popupBlock',
+    popupBlock: 'popupBlock',
+    popupAllow: 'popupAllow',
+    navBlock: 'navBlock'
+};
+
+function syncAddSection() {
+    const addSection = document.getElementById('add-section');
+    const typeSelect = document.getElementById('new-type');
+
+    if (currentFilter === 'builtin') {
+        addSection.classList.add('hidden');
+    } else {
+        addSection.classList.remove('hidden');
+        if (currentFilter === 'all') {
+            typeSelect.style.display = '';
+            typeSelect.value = 'popupBlock';
+        } else {
+            typeSelect.style.display = 'none';
+            typeSelect.value = FILTER_TO_TYPE[currentFilter];
+        }
+    }
+}
+
+// ── Unified list rendering ──
+
+function renderAll() {
+    loadStaticAllowlist().then(builtinList => {
+        chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], data => {
+            const pbl = data.popupBlock || [];
+            const pal = data.popupAllow || [];
+            const nbl = data.navBlock || [];
+
+            // Build unified items
+            const items = [];
+            pbl.forEach(d => items.push({ domain: d, type: 'popupBlock' }));
+            pal.forEach(d => items.push({ domain: d, type: 'popupAllow' }));
+            nbl.forEach(d => items.push({ domain: d, type: 'navBlock' }));
+            builtinList.forEach(d => items.push({ domain: d, type: 'builtin' }));
+
+            // Update tab counts
+            document.getElementById('count-all').textContent = pbl.length + pal.length + nbl.length;
+            document.getElementById('count-block').textContent = pbl.length;
+            document.getElementById('count-allow').textContent = pal.length;
+            document.getElementById('count-nav').textContent = nbl.length;
+            document.getElementById('count-builtin').textContent = builtinList.length;
+
+            // Filter
+            let filtered = items;
+            if (currentFilter !== 'all') {
+                filtered = items.filter(i => i.type === currentFilter);
+            }
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                filtered = filtered.filter(i => i.domain.toLowerCase().includes(q));
+            }
+
+            // Render
+            const container = document.getElementById('domain-list');
+            const emptyMsg = document.getElementById('empty-msg');
+            container.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyMsg.style.display = 'block';
+                return;
+            }
+            emptyMsg.style.display = 'none';
+
+            filtered.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'domain-row';
+
+                const name = document.createElement('span');
+                name.className = 'domain-name';
+                name.textContent = item.domain;
+
+                const cfg = TAG_CONFIG[item.type];
+                const tag = document.createElement('span');
+                tag.className = 'domain-tag ' + cfg.cls;
+                tag.textContent = cfg.label;
+
+                row.appendChild(name);
+                row.appendChild(tag);
+
+                if (item.type !== 'builtin') {
+                    const btn = document.createElement('button');
+                    btn.className = 'domain-x';
+                    btn.textContent = '\u00d7';
+                    btn.title = 'Remove';
+                    btn.addEventListener('click', () => removeDomain(item.domain, item.type));
+                    row.appendChild(btn);
+                }
+
+                container.appendChild(row);
+            });
+
+            // Update status card
+            updateStatusCard(pbl, pal, nbl);
         });
     });
 }
 
-function renderPopupBlocklist() {
-    renderList('popupBlock', 'popup-blocklist', 'empty-popup-block-msg', 'count-popup-block', removeFromPopupBlock);
-}
-function renderPopupAllowlist() {
-    renderList('popupAllow', 'popup-allowlist', 'empty-popup-allow-msg', 'count-popup-allow', removeFromPopupAllow);
-}
-function renderNavBlocklist() {
-    renderList('navBlock', 'nav-blocklist', 'empty-nav-block-msg', 'count-nav-block', removeFromNavBlock);
+function removeDomain(domain, storageKey) {
+    chrome.storage.sync.get([storageKey], data => {
+        const list = (data[storageKey] || []).filter(x => x !== domain);
+        chrome.storage.sync.set({ [storageKey]: list }, renderAll);
+    });
 }
 
-function addToList(input, targetKey, otherKeys) {
+function addDomain(input, targetKey) {
     const host = getHostname(input);
     if (!host) return;
     loadStaticAllowlist().then(staticList => {
         if (isDomainInList(host, staticList)) {
-            showToast(host + ' is in built-in allowlist');
+            showToast(host + ' is in default allowlist');
             return;
         }
+        const otherKeys = {
+            popupBlock: ['popupAllow', 'navBlock'],
+            popupAllow: ['popupBlock', 'navBlock'],
+            navBlock: ['popupBlock', 'popupAllow']
+        }[targetKey];
         const allKeys = [targetKey, ...otherKeys];
         chrome.storage.sync.get(allKeys, data => {
             const target = data[targetKey] || [];
-            if (target.includes(host)) return;
+            if (target.includes(host)) { showToast(host + ' already in list'); return; }
             target.push(host);
             const update = { [targetKey]: target };
             otherKeys.forEach(k => {
                 update[k] = (data[k] || []).filter(x => x !== host);
             });
             chrome.storage.sync.set(update, () => {
-                renderPopupBlocklist(); renderPopupAllowlist(); renderNavBlocklist();
-                const inputMap = {
-                    popupBlock: 'new-popup-block',
-                    popupAllow: 'new-popup-allow',
-                    navBlock: 'new-nav-block'
-                };
-                if (inputMap[targetKey]) {
-                    document.getElementById(inputMap[targetKey]).value = '';
-                }
+                document.getElementById('new-domain').value = '';
+                renderAll();
             });
         });
     });
 }
 
-function addToPopupBlock(input) {
-    addToList(input, 'popupBlock', ['popupAllow', 'navBlock']);
-}
-function addToPopupAllow(input) {
-    addToList(input, 'popupAllow', ['popupBlock', 'navBlock']);
-}
-function addToNavBlock(input) {
-    addToList(input, 'navBlock', ['popupBlock', 'popupAllow']);
+// ── Status Card ──
+
+var currentHost = null;
+
+function makeActionBtn(label, onClick) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.addEventListener('click', onClick);
+    return btn;
 }
 
-function removeFromPopupBlock(host) {
-    chrome.storage.sync.get(['popupBlock'], data => {
-        chrome.storage.sync.set({ popupBlock: (data.popupBlock || []).filter(x => x !== host) }, renderPopupBlocklist);
-    });
-}
-function removeFromPopupAllow(host) {
-    chrome.storage.sync.get(['popupAllow'], data => {
-        chrome.storage.sync.set({ popupAllow: (data.popupAllow || []).filter(x => x !== host) }, renderPopupAllowlist);
-    });
-}
-function removeFromNavBlock(host) {
-    chrome.storage.sync.get(['navBlock'], data => {
-        chrome.storage.sync.set({ navBlock: (data.navBlock || []).filter(x => x !== host) }, renderNavBlocklist);
+function clearHostRules() {
+    chrome.storage.sync.get(['popupBlock', 'popupAllow'], data => {
+        chrome.storage.sync.set({
+            popupBlock: (data.popupBlock || []).filter(x => x !== currentHost),
+            popupAllow: (data.popupAllow || []).filter(x => x !== currentHost),
+            navBlock: (data.navBlock || []).filter(x => x !== currentHost)
+        }, renderAll);
     });
 }
 
-function checkCurrentTab() {
+function updateStatusCard(pbl, pal, nbl) {
+    if (!currentHost) return;
+    const badge = document.getElementById('status-badge');
+    const actions = document.getElementById('status-actions');
+
+    const isBuiltin = isDomainInList(currentHost, staticAllowlist);
+    const isBlocked = pbl.includes(currentHost);
+    const isAllowed = pal.includes(currentHost);
+    const isNavBlock = nbl.includes(currentHost);
+
+    actions.innerHTML = '';
+
+    if (isBuiltin) {
+        badge.className = 'status-badge s-builtin';
+        badge.innerHTML = '<span class="dot"></span>Default allowed';
+    } else if (isNavBlock) {
+        badge.className = 'status-badge s-blocked';
+        badge.innerHTML = '<span class="dot"></span>Network blocked';
+        actions.appendChild(makeActionBtn('Clear', clearHostRules));
+    } else if (isBlocked) {
+        badge.className = 'status-badge s-blocked';
+        badge.innerHTML = '<span class="dot"></span>Popups blocked';
+        actions.appendChild(makeActionBtn('Allow', () => addDomain(currentHost, 'popupAllow')));
+        actions.appendChild(makeActionBtn('Clear', clearHostRules));
+    } else if (isAllowed) {
+        badge.className = 'status-badge s-allowed';
+        badge.innerHTML = '<span class="dot"></span>Popups allowed';
+        actions.appendChild(makeActionBtn('Block', () => addDomain(currentHost, 'popupBlock')));
+        actions.appendChild(makeActionBtn('Clear', clearHostRules));
+    } else {
+        badge.className = 'status-badge s-norule';
+        badge.innerHTML = '<span class="dot"></span>No rule';
+        actions.appendChild(makeActionBtn('Block', () => addDomain(currentHost, 'popupBlock')));
+        actions.appendChild(makeActionBtn('Allow', () => addDomain(currentHost, 'popupAllow')));
+    }
+}
+
+function initStatusCard() {
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
         if (!tabs[0]?.url) return;
         const host = getHostname(tabs[0].url);
         if (!host) return;
-        loadStaticAllowlist().then(staticList => {
-            if (isDomainInList(host, staticList)) return;
-            const btnBlock = document.getElementById('quick-popup-block');
-            const btnAllow = document.getElementById('quick-popup-allow');
-            btnBlock.textContent = `Block popups from ${host}`;
-            btnAllow.textContent = `Allow popups from ${host}`;
-            btnBlock.style.display = 'block';
-            btnAllow.style.display = 'block';
-            btnBlock.onclick = () => addToPopupBlock(host);
-            btnAllow.onclick = () => addToPopupAllow(host);
-        });
+        currentHost = host;
+
+        document.getElementById('status-host').textContent = host;
+        document.getElementById('status-card').classList.remove('status-hidden');
     });
 }
 
+// ── Init ──
+
 document.addEventListener('DOMContentLoaded', () => {
-    renderPopupBlocklist();
-    renderPopupAllowlist();
-    renderNavBlocklist();
-    checkCurrentTab();
+    document.getElementById('ext-version').textContent = 'v' + chrome.runtime.getManifest().version;
 
-    document.getElementById('add-popup-block-btn').onclick = () =>
-        addToPopupBlock(document.getElementById('new-popup-block').value);
-    document.getElementById('new-popup-block').onkeypress = e => {
-        if (e.key === 'Enter') addToPopupBlock(e.target.value);
-    };
+    initStatusCard();
+    renderAll();
 
-    document.getElementById('add-popup-allow-btn').onclick = () =>
-        addToPopupAllow(document.getElementById('new-popup-allow').value);
-    document.getElementById('new-popup-allow').onkeypress = e => {
-        if (e.key === 'Enter') addToPopupAllow(e.target.value);
-    };
-
-    document.getElementById('add-nav-block-btn').onclick = () =>
-        addToNavBlock(document.getElementById('new-nav-block').value);
-    document.getElementById('new-nav-block').onkeypress = e => {
-        if (e.key === 'Enter') addToNavBlock(e.target.value);
-    };
-
-    document.querySelectorAll('.section-header').forEach(header => {
-        header.addEventListener('click', () => {
-            header.closest('.section').classList.toggle('open');
+    // Filter tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentFilter = tab.dataset.filter;
+            syncAddSection();
+            renderAll();
         });
     });
+
+    // Search
+    document.getElementById('search-input').addEventListener('input', e => {
+        searchQuery = e.target.value.trim();
+        renderAll();
+    });
+
+    // Add domain
+    document.getElementById('add-btn').onclick = () => {
+        const domain = document.getElementById('new-domain').value;
+        const type = document.getElementById('new-type').value;
+        addDomain(domain, type);
+    };
+    document.getElementById('new-domain').onkeypress = e => {
+        if (e.key === 'Enter') {
+            const type = document.getElementById('new-type').value;
+            addDomain(e.target.value, type);
+        }
+    };
 });

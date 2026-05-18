@@ -241,67 +241,80 @@
         }
     });
 
+    const stopEvent = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+    };
+
+    const isNewTabTarget = (t) =>
+        t === '_blank' || t === '_new'
+        || (t !== '' && t !== '_self' && t !== '_top' && t !== '_parent');
+
+    const getEffectiveTarget = (el) => {
+        let t = (el.target || '').toLowerCase();
+        if (!t) { const b = document.querySelector('base[target]'); if (b) t = b.target.toLowerCase(); }
+        return t;
+    };
+
+    const checkCrossOriginPopup = (url) => {
+        try {
+            const dest = new URL(url, location.href);
+            if (dest.origin === location.origin) return null;
+        } catch (_) { return null; }
+        return getPopupAction();
+    };
+
     const handleLinkEvent = (e) => {
-        if (!e.isTrusted) return;
+        if (!e.isTrusted || popupPending) return;
+        if (e.type === 'auxclick' && e.button !== 1) return;
         const a = e.composedPath().find(el => el.tagName === 'A');
         if (!a || !a.href) return;
 
-        const navAction = getNavAction(a.href);
-        if (navAction === 'BLOCK') {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            return;
-        }
+        if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
 
-        const t = (a.target || '').toLowerCase();
-        const isNewTab = t === '_blank' || t === '_new'
-            || (t !== '' && t !== '_self' && t !== '_top' && t !== '_parent');
+        const forceNewTab = e.type === 'auxclick';
+        if (!forceNewTab && !isNewTabTarget(getEffectiveTarget(a))) return;
 
-        if (isNewTab) {
-            try {
-                const dest = new URL(a.href, location.href);
-                if (dest.origin === location.origin) return;
-            } catch (_) { return; }
-
-            const action = getPopupAction();
-            if (action === 'BLOCK') {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                return;
-            }
-            if (action === 'ASK') {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                askPopup(a.href, a.target || '_blank', '');
-                return;
-            }
-        }
+        const action = checkCrossOriginPopup(a.href);
+        if (action === 'BLOCK') { stopEvent(e); return; }
+        if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_blank', ''); }
     };
 
     document.addEventListener('mousedown', handleLinkEvent, true);
     document.addEventListener('click', handleLinkEvent, true);
+    document.addEventListener('auxclick', handleLinkEvent, true);
 
     const originalClick = HTMLElement.prototype.click;
     HTMLElement.prototype.click = function () {
-        if (this.tagName === 'A' && this.href) {
-            try {
-                const dest = new URL(this.href, location.href);
-                if (dest.origin !== location.origin) {
-                    const t = (this.target || '').toLowerCase();
-                    const isNewTab = t === '_blank' || t === '_new'
-                        || (t !== '' && t !== '_self' && t !== '_top' && t !== '_parent');
-                    if (isNewTab) {
-                        const action = getPopupAction();
-                        if (action === 'BLOCK') return;
-                        if (action === 'ASK') { askPopup(this.href); return; }
-                    }
-                }
-            } catch (e) { }
+        if (this.tagName === 'A' && this.href && isNewTabTarget(getEffectiveTarget(this))) {
+            const action = checkCrossOriginPopup(this.href);
+            if (action === 'BLOCK') return;
+            if (action === 'ASK') { askPopup(this.href, this.target || '_blank', ''); return; }
         }
         return originalClick.call(this);
     };
+
+    const originalSubmit = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function () {
+        if (this.action && isNewTabTarget((this.target || '').toLowerCase())) {
+            const action = checkCrossOriginPopup(this.action);
+            if (action === 'BLOCK') return;
+            if (action === 'ASK') { askPopup(this.action, this.target || '_blank', ''); return; }
+        }
+        return originalSubmit.call(this);
+    };
+
+    if (HTMLFormElement.prototype.requestSubmit) {
+        const orig = HTMLFormElement.prototype.requestSubmit;
+        HTMLFormElement.prototype.requestSubmit = function (s) {
+            if (this.action && isNewTabTarget((s?.formTarget || this.target || '').toLowerCase())) {
+                const action = checkCrossOriginPopup(this.action);
+                if (action === 'BLOCK') return;
+                if (action === 'ASK') { askPopup(this.action, this.target || '_blank', ''); return; }
+            }
+            return orig.call(this, s);
+        };
+    }
 
 })();
