@@ -9,8 +9,8 @@
     };
 
     const getPopupAction = () => {
-        const pal = JSON.parse(document.documentElement.getAttribute('data-nmt-pal') || '[]');
-        const pbl = JSON.parse(document.documentElement.getAttribute('data-nmt-pbl') || '[]');
+        const pal = JSON.parse(document.documentElement.getAttribute('data-pg-pal') || '[]');
+        const pbl = JSON.parse(document.documentElement.getAttribute('data-pg-pbl') || '[]');
 
         let topHost;
         try {
@@ -33,7 +33,7 @@
     const getNavAction = (url) => {
         try {
             const dest = new URL(url, location.href);
-            const nbl = JSON.parse(document.documentElement.getAttribute('data-nmt-nbl') || '[]');
+            const nbl = JSON.parse(document.documentElement.getAttribute('data-pg-nbl') || '[]');
             if (checkMatch(dest.hostname.toLowerCase(), nbl)) return 'BLOCK';
         } catch (e) { }
         return 'ALLOW';
@@ -53,18 +53,18 @@
     }, true);
 
     const freezePage = () => {
-        if (document.getElementById('nmt-freeze')) return;
+        if (document.getElementById('pg-freeze')) return;
         HTMLMediaElement.prototype.play = function () { return Promise.resolve(); };
         document.querySelectorAll('video, audio').forEach(m => { if (!m.paused) m.pause(); });
         const style = document.createElement('style');
-        style.id = 'nmt-freeze';
+        style.id = 'pg-freeze';
         style.textContent = '*, *::before, *::after { animation-play-state: paused !important; transition: none !important; }';
         document.head?.appendChild(style);
     };
 
     const unfreezePage = () => {
         HTMLMediaElement.prototype.play = origPlay;
-        document.getElementById('nmt-freeze')?.remove();
+        document.getElementById('pg-freeze')?.remove();
     };
 
     const askPopup = (url, name, specs, isNav = false) => {
@@ -73,7 +73,7 @@
         let resolved = url;
         try { resolved = new URL(url, location.href).href; } catch (_) { }
         window.postMessage({
-            action: 'NMT_ASK',
+            action: 'PG_ASK',
             url: resolved,
             name,
             specs,
@@ -83,7 +83,7 @@
     };
 
     window.addEventListener('message', e => {
-        if (e.data?.action === 'NMT_DIALOG_CLOSED') {
+        if (e.data?.action === 'PG_DIALOG_CLOSED') {
             popupPending = false;
             unfreezePage();
             if (pendingNav) {
@@ -246,9 +246,9 @@
 
 
     const navToken = Math.random().toString(36).slice(2);
-    document.documentElement.setAttribute('data-nmt-nav-token', navToken);
+    document.documentElement.setAttribute('data-pg-nav-token', navToken);
     window.addEventListener('message', e => {
-        if (e.data?.action === 'NMT_DO_NAV' && e.data.token === navToken) {
+        if (e.data?.action === 'PG_DO_NAV' && e.data.token === navToken) {
             bypassNext = true;
             if (origAssign) origAssign.call(location, e.data.url);
             else location.href = e.data.url;

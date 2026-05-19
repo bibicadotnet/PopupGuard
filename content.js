@@ -13,9 +13,9 @@ const loadLists = async () => {
 
 const syncData = async () => {
     const { pal, pbl, nbl } = await loadLists();
-    document.documentElement.setAttribute("data-nmt-pal", JSON.stringify(pal));
-    document.documentElement.setAttribute("data-nmt-pbl", JSON.stringify(pbl));
-    document.documentElement.setAttribute("data-nmt-nbl", JSON.stringify(nbl));
+    document.documentElement.setAttribute("data-pg-pal", JSON.stringify(pal));
+    document.documentElement.setAttribute("data-pg-pbl", JSON.stringify(pbl));
+    document.documentElement.setAttribute("data-pg-nbl", JSON.stringify(nbl));
 };
 
 syncData();
@@ -24,13 +24,13 @@ chrome.storage.onChanged.addListener(syncData);
 const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const destHost = getHost(url);
     if (window !== window.top) {
-        window.top.postMessage({ action: "NMT_IFRAME", url, source, name, specs, isNav }, "*");
+        window.top.postMessage({ action: "PG_IFRAME", url, source, name, specs, isNav }, "*");
         return;
     }
-    if (document.getElementById("nmt-container")) return;
+    if (document.getElementById("pg-container")) return;
 
     const container = document.createElement("div");
-    container.id = "nmt-container";
+    container.id = "pg-container";
     container.style.cssText = "position:fixed !important;top:0 !important;left:0 !important;z-index:2147483647 !important;width:0 !important;height:0 !important;display:block !important;";
     document.body.appendChild(container);
 
@@ -64,7 +64,7 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
             <div class="cd">
                 <div class="hd">
                     <img src="${iconUrl}">
-                    <h3>NoMoreTabs</h3>
+                    <h3>PopupGuard</h3>
                 </div>
                 <p class="src">
                     <b>${source}</b> is trying to automatically open a ${isNav ? 'new page' : 'new tab'}:
@@ -97,8 +97,8 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const cbDest = shadow.getElementById("cb-dest");
     shadow.getElementById("dest-host-label").textContent = destHost;
     if (destHost && destHost !== source) {
-        const pal = JSON.parse(document.documentElement.getAttribute('data-nmt-pal') || '[]');
-        const nbl = JSON.parse(document.documentElement.getAttribute('data-nmt-nbl') || '[]');
+        const pal = JSON.parse(document.documentElement.getAttribute('data-pg-pal') || '[]');
+        const nbl = JSON.parse(document.documentElement.getAttribute('data-pg-nbl') || '[]');
         if (!checkMatch(destHost, pal) && !checkMatch(destHost, nbl)) {
             shadow.getElementById("cb-dest-row").style.display = "";
         }
@@ -130,7 +130,7 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
 
     const closeDialog = () => {
         container.remove();
-        window.postMessage({ action: 'NMT_DIALOG_CLOSED' }, '*');
+        window.postMessage({ action: 'PG_DIALOG_CLOSED' }, '*');
     };
 
     const saveChecked = () => {
@@ -144,8 +144,8 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
         saveChecked();
         closeDialog();
         if (isNav) {
-            const token = document.documentElement.getAttribute('data-nmt-nav-token');
-            window.postMessage({ action: 'NMT_DO_NAV', url, token }, '*');
+            const token = document.documentElement.getAttribute('data-pg-nav-token');
+            window.postMessage({ action: 'PG_DO_NAV', url, token }, '*');
         } else {
             window.open(url, name, specs);
         }
@@ -167,11 +167,11 @@ const updateAttr = (key, fn) => {
 
 const saveSource = (source, action) => {
     if (action === 'allow') {
-        updateAttr('data-nmt-pal', list => {
+        updateAttr('data-pg-pal', list => {
             if (list.includes(source)) return null;
             list.push(source); return list;
         });
-        updateAttr('data-nmt-pbl', list => list.filter(x => x !== source));
+        updateAttr('data-pg-pbl', list => list.filter(x => x !== source));
         chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
             const pal = data.popupAllow || [];
             const pbl = (data.popupBlock || []).filter(x => x !== source);
@@ -179,11 +179,11 @@ const saveSource = (source, action) => {
             chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl });
         });
     } else {
-        updateAttr('data-nmt-pbl', list => {
+        updateAttr('data-pg-pbl', list => {
             if (list.includes(source)) return null;
             list.push(source); return list;
         });
-        updateAttr('data-nmt-pal', list => list.filter(x => x !== source));
+        updateAttr('data-pg-pal', list => list.filter(x => x !== source));
         chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
             const pbl = data.popupBlock || [];
             const pal = (data.popupAllow || []).filter(x => x !== source);
@@ -194,7 +194,7 @@ const saveSource = (source, action) => {
 };
 
 const saveDestBlock = (host) => {
-    updateAttr('data-nmt-nbl', list => {
+    updateAttr('data-pg-nbl', list => {
         if (list.includes(host)) return null;
         list.push(host); return list;
     });
@@ -220,7 +220,7 @@ const checkMatch = (host, list) => {
 };
 
 window.addEventListener("message", e => {
-    if (e.data?.action === 'NMT_ASK' || e.data?.action === 'NMT_IFRAME') {
+    if (e.data?.action === 'PG_ASK' || e.data?.action === 'PG_IFRAME') {
         const source = e.data.source || getHost(e.data.url);
         if (source === 'unknown') return;
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);

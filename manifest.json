@@ -1,9 +1,8 @@
 {
-   "key": "bjegjncgcmfalgmgempjllgliomifdoo",
-   "name": "NoMoreTabs",
-   "version": "1.5",
+   "name": "PopupGuard",
+   "version": "1.0",
    "manifest_version": 3,
-   "description": "Stop websites from opening unwanted new tabs. Action-based protection.",
+   "description": "Intercepts unwanted popups and redirects from ad scripts. Ask, allow, or block per domain, at DOM and network level.",
    "icons": {
       "16": "app_icon_16.png",
       "48": "app_icon_48.png",
