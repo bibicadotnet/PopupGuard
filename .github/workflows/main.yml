@@ -21,8 +21,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Filename set to NoMoreTabs.zip
-          ZIP_NAME="NoMoreTabs.zip"
+          # Filename set to PopupGuard.zip
+          ZIP_NAME="PopupGuard.zip"
           
           # Determine the TAG_NAME
           TAG_NAME=${{ github.event.release.tag_name }}
