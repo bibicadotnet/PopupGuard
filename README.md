@@ -2,37 +2,37 @@
 
 **[🇻🇳 Tiếng Việt](README.vi.md)**
 
-![PopupGuard Banner](https://img.bibica.net/srvMVjnP.png)
-
-Browser extension to block unwanted popups, new tabs, and automatic redirects.
-
-## How it Works
-When a website tries to open a new tab, window, or redirect you to another site, a confirmation dialog appears inside your current tab.
-
-### Action Buttons
-* **Allow this time** (green): Allow the request once.
-* **Block this time** (red): Block the request once.
-
-### Checkboxes (Saves permanent rules)
-Checking one box automatically disables the opposite action button:
-* **Always allow [source] to open new tabs**: Future popup/tab requests from this domain are automatically allowed. (Automatically disables the *Block this time* button).
-* **Always block [source] from opening new tabs**: Future popup/tab requests from this domain are silently blocked without asking. (Automatically disables the *Allow this time* button).
-* **Block all network requests to [destination]**: Completely blocks all resource requests (scripts, images, frames, etc.) to the destination domain at the network level (declarativeNetRequest). The dialog only shows this option when the destination domain differs from the source domain. If checked, the page reloads automatically after clicking **Block this time**. *(Default allowlisted domains like shopee.vn, tiktok.com... are automatically bypassed).*
+> **Take control of your browsing experience.** This extension intercepts unwanted popups, forced new tabs, and sneaky redirects, giving you the final say before anything opens.
 
 ---
 
-## Extension Popup
-Click the extension icon in your toolbar to manage rules manually:
+## Core Features
 
-* **Dynamic Status Card**: Automatically detects the active website's status (Blocked, Allowed, Network, Default, or No rule). Easily toggle or remove rules directly via quick action buttons (Block, Allow, Clear).
-* **Intuitive Tabbed Filtering**:
-  * **All**: All custom rules + default safe list.
-  * **Blocked**: Source domains blocked from opening popups (`popupBlock`).
-  * **Allowed**: Source domains allowed to open popups (`popupAllow`).
-  * **Network**: Destination domains blocked at the network level (`navBlock`).
-  * **Default**: Built-in safe list (`allowlist.json`), containing trusted domains (Google, Facebook, banks...) that are always allowed and cannot be blocked to prevent breaking crucial websites.
-* **Manual Input**: Supports standard domains `example.com` and wildcards `*.example.com`.
-* Honestly, there isn't much to configure. Managing rules on-the-fly through the active dialog alerts is usually more than enough. You'll mostly open the popup to review if you accidentally added or blocked a domain. The built-in search bar makes it super fast and simple.
+Instead of blindly blocking everything and breaking the websites you use, the extension pauses the action and displays a clean, in-page confirmation dialog. You decide what happens next:
+
+- **One-time Action:** Approve (**Allow**) or deny (**Block**) the popup just for a specific click.
+- **Smart Permanent Rules:** Check a box before clicking to remember your choice forever.
+  - **Always Allow / Block:** Set permanent popup rules for the website you are currently on.
+  - **Network-Level Kill Switch:** If a site tries to redirect you to a completely different (and often shady) destination, you can choose to block all future network requests (scripts, images, frames) to that destination domain.
+
+> **Note:** Essential trusted domains like Google, Facebook, and major banks are protected via a built-in safe list to ensure your daily browsing never breaks.
+
+---
+
+## Simple & Fast Management
+
+Click the extension icon in your toolbar to view your dashboard. Honestly, there isn't much to configure—managing rules on-the-fly through the active dialog alerts is usually more than enough. But when you need it, the dashboard offers:
+
+- **Live Status Card:** Instantly see the rule applied to your active tab and toggle it on the fly.
+- **Categorized Tabs:** Quickly filter your custom rules by *Allowed*, *Blocked*, or *Network* level.
+- **Advanced Manual Input:** Add custom rules using exact domains (`example.com`) or wildcards (`*.example.com`).
+- **Lightning Search:** Instantly find and delete any rule if you made a mistake.
+
+---
+
+## The Best Part?
+
+**Set it and forget it.** You rarely need to open the extension dashboard. The on-the-fly dialog handles 99% of the work seamlessly as you browse. Just allow what you need, block what you don't, and let the extension handle the rest.
 
 ---
 
@@ -41,5 +41,3 @@ Click the extension icon in your toolbar to manage rules manually:
 2. Open `chrome://extensions/` in your browser.
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the extracted folder.
-
-*Note: This extension must be installed manually. It is not available on chromewebstore.google.com because registration costs $5 :]]*
