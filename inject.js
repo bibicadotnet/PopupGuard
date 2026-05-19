@@ -316,6 +316,7 @@
             if (action === 'BLOCK') return;
             if (action === 'ASK') { askPopup(this.action, this.target || '_blank', ''); return; }
         }
+        if (!this.isConnected) return;
         return originalSubmit.call(this);
     };
 
