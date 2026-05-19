@@ -1,8 +1,8 @@
-# NoMoreTabs
+# PopupGuard
 
 **[🇻🇳 Tiếng Việt](README.vi.md)**
 
-![NoMoreTabs Banner](https://img.bibica.net/srvMVjnP.png)
+![PopupGuard Banner](https://img.bibica.net/srvMVjnP.png)
 
 Browser extension to block unwanted popups, new tabs, and automatic redirects.
 
@@ -37,7 +37,7 @@ Click the extension icon in your toolbar to manage rules manually:
 ---
 
 ## Installation
-1. Download and extract **[NoMoreTabs.zip](https://github.com/bibicadotnet/NoMoreTabs/releases/latest/download/NoMoreTabs.zip)**.
+1. Download and extract **[PopupGuard.zip](https://github.com/bibicadotnet/PopupGuard/releases/latest/download/PopupGuard.zip)**.
 2. Open `chrome://extensions/` in your browser.
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the extracted folder.
