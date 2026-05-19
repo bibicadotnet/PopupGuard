@@ -19,6 +19,14 @@ Instead of blindly blocking everything and breaking the websites you use, the ex
 
 ---
 
+## Installation
+1. Download and extract **[PopupGuard.zip](https://github.com/bibicadotnet/PopupGuard/releases/latest/download/PopupGuard.zip)**.
+2. Open `chrome://extensions/` in your browser.
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select the extracted folder.
+
+---
+
 ## Simple & Fast Management
 
 Click the extension icon in your toolbar to view your dashboard. Honestly, there isn't much to configure—managing rules on-the-fly through the active dialog alerts is usually more than enough. But when you need it, the dashboard offers:
@@ -36,8 +44,10 @@ Click the extension icon in your toolbar to view your dashboard. Honestly, there
 
 ---
 
-## Installation
-1. Download and extract **[PopupGuard.zip](https://github.com/bibicadotnet/PopupGuard/releases/latest/download/PopupGuard.zip)**.
-2. Open `chrome://extensions/` in your browser.
-3. Enable **Developer mode**.
-4. Click **Load unpacked** and select the extracted folder.
+## Privacy & Permissions
+
+PopupGuard is built with privacy in mind. It runs entirely locally on your machine.
+
+* **No Remote Code:** All scripts are bundled locally.
+* **No Tracking:** We do not collect, transmit, or sell your browsing history.
+* **Local Storage:** Your custom rules are saved using your browser's built-in `storage.sync` API.
