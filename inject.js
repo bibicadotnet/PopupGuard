@@ -300,7 +300,18 @@
     };
 
     const handleLinkEvent = (e) => {
-        if (popupPending) return;
+        if (popupPending) {
+            if (e.isTrusted && e.type === 'click') {
+                const a = e.composedPath().find(el => el.tagName === 'A');
+                if (a?.href && isNewTabTarget(getEffectiveTarget(a))) {
+                    try {
+                        if (new URL(a.href, location.href).origin !== location.origin)
+                            e.preventDefault();
+                    } catch (_) {}
+                }
+            }
+            return;
+        }
 
         if (!e.isTrusted) {
             const a = e.composedPath().find(el => el.tagName === 'A');
