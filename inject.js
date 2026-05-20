@@ -154,6 +154,9 @@
     });
 
     const interceptedOpen = function (url, name, specs) {
+        if (name && typeof name === 'string') {
+            try { if (window.frames[name]) return originalOpen.call(window, url, name, specs); } catch (_) { }
+        }
         const targetUrl = url || 'about:blank';
         const action = getPopupAction();
         if (action === 'BLOCK') {
@@ -276,14 +279,24 @@
     });
 
     const stopEvent = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
+        try {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        } catch (_) { }
+        if (e && !e.isTrusted && !e.cancelable && e.type === 'click') {
+            const a = e.composedPath ? e.composedPath().find(el => el.tagName === 'A') : e.target?.closest?.('a');
+            if (a && a.href) a.removeAttribute('href');
+        }
     };
 
-    const isNewTabTarget = (t) =>
-        t === '_blank' || t === '_new'
-        || (t !== '' && t !== '_self' && t !== '_top' && t !== '_parent');
+    const isNewTabTarget = (t) => {
+        if (t === '_blank' || t === '_new') return true;
+        if (!t || t === '_self' || t === '_top' || t === '_parent') return false;
+        try { if (window.frames[t]) return false; } catch (_) { }
+        try { if (window.parent.frames[t]) return false; } catch (_) { }
+        return true;
+    };
 
     const getEffectiveTarget = (el) => {
         let t = (el.target || '').toLowerCase();
@@ -307,13 +320,17 @@
                     try {
                         if (new URL(a.href, location.href).origin !== location.origin)
                             e.preventDefault();
-                    } catch (_) {}
+                    } catch (_) { }
                 }
             }
             return;
         }
 
+        if (e.defaultPrevented && e.type !== 'mousedown') return;
+
         if (!e.isTrusted) {
+            if ((e.metaKey || e.ctrlKey) && e.type === 'click') { stopEvent(e); return; }
+            if (e.button !== 0 && e.type !== 'mousedown') { stopEvent(e); return; }
             const a = e.composedPath().find(el => el.tagName === 'A');
             if (a && a.href) {
                 if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
@@ -327,6 +344,7 @@
         if (e.type === 'auxclick' && e.button !== 1) return;
         const a = e.composedPath().find(el => el.tagName === 'A');
         if (!a || !a.href) return;
+        if (a.hasAttribute('download')) return;
 
         if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
 
@@ -346,9 +364,84 @@
         if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_blank', ''); }
     };
 
-    document.addEventListener('mousedown', handleLinkEvent, true);
-    document.addEventListener('click', handleLinkEvent, true);
-    document.addEventListener('auxclick', handleLinkEvent, true);
+    const handleFormSubmitEvent = (e) => {
+        if (e.defaultPrevented) return;
+        const form = e.target;
+        if (!form || form.tagName !== 'FORM' || !form.action) return;
+
+        if (getNavAction(form.action) === 'BLOCK') {
+            stopEvent(e);
+            return;
+        }
+
+        if (!e.isTrusted) {
+            const action = checkCrossOriginPopup(form.action);
+            if (action === 'BLOCK') { stopEvent(e); return; }
+            if (action === 'ASK') { stopEvent(e); askPopup(form.action, form.target || '_self', '', true); return; }
+            return;
+        }
+
+        if (isNewTabTarget(getEffectiveTarget(form))) {
+            let action = checkCrossOriginPopup(form.action);
+            if (action === 'BLOCK') action = 'ASK';
+            if (action === 'ASK') {
+                stopEvent(e);
+                askPopup(form.action, form.target || '_blank', '');
+            }
+        }
+    };
+
+    const attachDocListeners = (doc) => {
+        if (!doc) return;
+        doc.addEventListener('mousedown', handleLinkEvent, true);
+        doc.addEventListener('click', handleLinkEvent, true);
+        doc.addEventListener('auxclick', handleLinkEvent, true);
+        doc.addEventListener('submit', handleFormSubmitEvent, true);
+    };
+
+    attachDocListeners(document);
+
+    const hookDispatch = (proto) => {
+        if (!proto || !proto.dispatchEvent) return;
+        const origDispatch = proto.dispatchEvent;
+        if (origDispatch._pgHooked) return;
+
+        proto.dispatchEvent = function (...args) {
+            const e = args[0];
+            if (e && (e.type === 'click' || e.type === 'auxclick')) {
+                let target = this;
+                if (target.tagName !== 'A' && e.composedPath) {
+                    target = e.composedPath().find(el => el.tagName === 'A') || this;
+                }
+                if (target.tagName === 'A' && target.href && !e.isTrusted) {
+                    if (target.hasAttribute('download')) return origDispatch.apply(this, args);
+
+                    if (getNavAction(target.href) === 'BLOCK') {
+                        target.removeAttribute('href');
+                        return false;
+                    }
+                    const action = checkCrossOriginPopup(target.href);
+                    if (action === 'BLOCK') {
+                        target.removeAttribute('href');
+                        return false;
+                    }
+                    if (action === 'ASK') {
+                        const url = target.href;
+                        target.removeAttribute('href');
+                        askPopup(url, target.target || '_self', '');
+                        return false;
+                    }
+                }
+            }
+            return origDispatch.apply(this, args);
+        };
+        proto.dispatchEvent._pgHooked = true;
+    };
+
+    hookDispatch(EventTarget.prototype);
+    hookDispatch(Node.prototype);
+    hookDispatch(HTMLElement.prototype);
+    if (window.HTMLAnchorElement) hookDispatch(HTMLAnchorElement.prototype);
 
     document.addEventListener('click', (e) => {
         if (!popupBlockedDuringClick || !e.isTrusted || isReplayingClick) return;
@@ -359,16 +452,37 @@
         if (action === 'ASK') { e.preventDefault(); askPopup(a.href, '_self', '', true); }
     }, false);
 
-    const originalClick = HTMLElement.prototype.click;
-    HTMLElement.prototype.click = function () {
-        if (this.tagName === 'A' && this.href) {
-            if (getNavAction(this.href) === 'BLOCK') return;
-            const action = checkCrossOriginPopup(this.href);
-            if (action === 'BLOCK') return;
-            if (action === 'ASK') { askPopup(this.href, this.target || '_self', ''); return; }
-        }
-        return originalClick.call(this);
+    const hookClick = (proto) => {
+        if (!proto || !proto.click) return;
+        const origClick = proto.click;
+        if (origClick._pgHooked) return;
+
+        proto.click = function () {
+            if (this.tagName === 'A' && this.href) {
+                if (this.hasAttribute('download')) return origClick.call(this);
+                if (getNavAction(this.href) === 'BLOCK') {
+                    this.removeAttribute('href');
+                    return;
+                }
+                const action = checkCrossOriginPopup(this.href);
+                if (action === 'BLOCK') {
+                    this.removeAttribute('href');
+                    return;
+                }
+                if (action === 'ASK') {
+                    const url = this.href;
+                    this.removeAttribute('href');
+                    askPopup(url, this.target || '_self', '');
+                    return;
+                }
+            }
+            return origClick.call(this);
+        };
+        proto.click._pgHooked = true;
     };
+
+    hookClick(HTMLElement.prototype);
+    if (window.HTMLAnchorElement) hookClick(HTMLAnchorElement.prototype);
 
     const originalSubmit = HTMLFormElement.prototype.submit;
     HTMLFormElement.prototype.submit = function () {
@@ -395,5 +509,163 @@
             return orig.call(this, s);
         };
     }
+
+    const hookProp = (proto, prop, extract) => {
+        if (!proto) return;
+        const desc = Object.getOwnPropertyDescriptor(proto, prop);
+        if (!desc?.get) return;
+        const origGet = desc.get;
+        Object.defineProperty(proto, prop, {
+            get: function () {
+                const val = origGet.call(this);
+                try { protectWindow(extract(val)); } catch (_) { }
+                return val;
+            },
+            configurable: true,
+            enumerable: true
+        });
+    };
+
+    const protectedWindows = new WeakSet();
+    protectedWindows.add(window);
+
+    const protectWindow = (w) => {
+        if (!w || protectedWindows.has(w)) return;
+        try { w.Object; } catch (_) { return; }
+        protectedWindows.add(w);
+        try {
+            const wOpen = w.open;
+            Object.defineProperty(w, 'open', {
+                get: () => function (url, name, specs) {
+                    if (name && typeof name === 'string') {
+                        try { if (w.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
+                        try { if (w.parent.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
+                        try { if (w.top.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
+                    }
+                    const targetUrl = url || 'about:blank';
+                    const action = getPopupAction();
+                    if (action === 'BLOCK') {
+                        markSiteHasAds();
+                        popupBlockedDuringClick = true;
+                        if (!isReplayingClick) replayClickAfterBlock();
+                        return fakeWindow;
+                    }
+                    if (action === 'ASK') {
+                        markSiteHasAds();
+                        popupBlockedDuringClick = true;
+                        askPopup(targetUrl, name, specs);
+                        return fakeWindow;
+                    }
+                    return wOpen.call(w, url, name, specs);
+                },
+                set: () => { },
+                configurable: true
+            });
+        } catch (_) { }
+        try {
+            const d = w.document;
+            attachDocListeners(d);
+
+            if (w.MutationObserver) {
+                let currentDocEl = d.documentElement;
+                new w.MutationObserver(() => {
+                    if (d.documentElement && currentDocEl !== d.documentElement) {
+                        currentDocEl = d.documentElement;
+                        attachDocListeners(d);
+                    }
+                }).observe(d, { childList: true });
+            }
+
+            if (w.Document && w.Document.prototype) {
+                const wOrigWrite = w.Document.prototype.write;
+                const wOrigWriteln = w.Document.prototype.writeln;
+                w.Document.prototype.write = function (...args) {
+                    const r = wOrigWrite.apply(this, args);
+                    attachDocListeners(this);
+                    return r;
+                };
+                w.Document.prototype.writeln = function (...args) {
+                    const r = wOrigWriteln.apply(this, args);
+                    attachDocListeners(this);
+                    return r;
+                };
+            }
+        } catch (_) { }
+
+        try {
+            hookClick(w.HTMLElement?.prototype);
+            hookClick(w.HTMLAnchorElement?.prototype);
+            hookDispatch(w.EventTarget?.prototype);
+            hookDispatch(w.Node?.prototype);
+            hookDispatch(w.HTMLElement?.prototype);
+            hookDispatch(w.HTMLAnchorElement?.prototype);
+        } catch (_) { }
+
+        try {
+            if (w.HTMLIFrameElement) {
+                hookProp(w.HTMLIFrameElement.prototype, 'contentWindow', win => win);
+                hookProp(w.HTMLIFrameElement.prototype, 'contentDocument', doc => doc?.defaultView);
+            }
+            if (w.HTMLFrameElement) {
+                hookProp(w.HTMLFrameElement.prototype, 'contentWindow', win => win);
+                hookProp(w.HTMLFrameElement.prototype, 'contentDocument', doc => doc?.defaultView);
+            }
+        } catch (_) { }
+    };
+
+    hookProp(HTMLIFrameElement.prototype, 'contentWindow', w => w);
+    hookProp(HTMLIFrameElement.prototype, 'contentDocument', d => d?.defaultView);
+    if (window.HTMLFrameElement) {
+        hookProp(HTMLFrameElement.prototype, 'contentWindow', w => w);
+        hookProp(HTMLFrameElement.prototype, 'contentDocument', d => d?.defaultView);
+    }
+
+    let currentDocEl = document.documentElement;
+
+    const protectIframe = (el) => {
+        if (el.tagName !== 'IFRAME' && el.tagName !== 'FRAME') return;
+        try { protectWindow(el.contentWindow); } catch (_) { }
+    };
+
+    new MutationObserver(mutations => {
+        if (document.documentElement && currentDocEl !== document.documentElement) {
+            currentDocEl = document.documentElement;
+            document.addEventListener('click', handleLinkEvent, true);
+            document.addEventListener('mousedown', handleLinkEvent, true);
+            document.addEventListener('auxclick', handleLinkEvent, true);
+        }
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType !== 1) continue;
+                protectIframe(node);
+                if (node.querySelectorAll) {
+                    node.querySelectorAll('iframe, frame').forEach(protectIframe);
+                }
+            }
+        }
+    }).observe(document, { childList: true, subtree: true });
+
+    const origDocWrite = Document.prototype.write;
+    const origDocWriteln = Document.prototype.writeln;
+    const checkDocReset = (doc) => {
+        if (!doc) return;
+        if (doc === document && document.documentElement && currentDocEl !== document.documentElement) {
+            currentDocEl = document.documentElement;
+            attachDocListeners(document);
+        } else if (doc !== document && doc.documentElement && doc._pgCurrentDocEl !== doc.documentElement) {
+            doc._pgCurrentDocEl = doc.documentElement;
+            attachDocListeners(doc);
+        }
+    };
+    Document.prototype.write = function (...args) {
+        const r = origDocWrite.apply(this, args);
+        checkDocReset(this);
+        return r;
+    };
+    Document.prototype.writeln = function (...args) {
+        const r = origDocWriteln.apply(this, args);
+        checkDocReset(this);
+        return r;
+    };
 
 })();

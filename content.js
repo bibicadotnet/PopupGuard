@@ -52,7 +52,7 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const pbl = JSON.parse(document.documentElement.getAttribute('data-pg-pbl') || '[]');
     const isSourceBlocked = checkMatch(source, pbl);
 
-    const actionText = isSourceBlocked 
+    const actionText = isSourceBlocked
         ? `<b>${source}</b> is a blocked site. You clicked an external link to:`
         : `<b>${source}</b> is trying to automatically open a ${isNav ? 'new page' : 'new tab'}:`;
 
