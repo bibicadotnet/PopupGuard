@@ -40,15 +40,26 @@
     };
 
     let popupPending = false;
-    let siteHasAds = false;
+    let _siteHasAds = false;
+    const isSiteHasAds = () => _siteHasAds || document.documentElement.getAttribute('data-pg-ads') === '1';
+
     let pendingNav = null;
     let lastMousedownPos = null;
     let isReplayingClick = false;
+    let popupBlockedDuringClick = false;
     const origPlay = HTMLMediaElement.prototype.play;
+
+    const markSiteHasAds = () => {
+        if (_siteHasAds) return;
+        _siteHasAds = true;
+        document.documentElement.setAttribute('data-pg-ads', '1');
+        window.postMessage({ action: 'PG_SITE_HAS_ADS' }, '*');
+    };
 
     document.addEventListener('mousedown', e => {
         if (e.isTrusted && !isReplayingClick) {
             lastMousedownPos = { x: e.clientX, y: e.clientY };
+            popupBlockedDuringClick = false;
         }
     }, true);
 
@@ -146,11 +157,17 @@
         const targetUrl = url || 'about:blank';
         const action = getPopupAction();
         if (action === 'BLOCK') {
-            siteHasAds = true;
+            markSiteHasAds();
+            popupBlockedDuringClick = true;
             if (!isReplayingClick) replayClickAfterBlock();
             return fakeWindow;
         }
-        if (action === 'ASK') { siteHasAds = true; askPopup(targetUrl, name, specs); return fakeWindow; }
+        if (action === 'ASK') {
+            markSiteHasAds();
+            popupBlockedDuringClick = true;
+            askPopup(targetUrl, name, specs);
+            return fakeWindow;
+        }
         return originalOpen.call(window, url, name, specs);
     };
 
@@ -179,9 +196,12 @@
             }
         } catch (e) { doNavigate(url); return; }
 
+        if (getNavAction(url) === 'BLOCK') return;
+
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
-        if (action === 'BLOCK') return;
+        if (action === 'BLOCK') { markSiteHasAds(); return; }
+        markSiteHasAds();
         askPopup(url, '_self', '', true);
     };
 
@@ -218,7 +238,7 @@
 
     if (window.navigation) {
         window.navigation.addEventListener('navigate', e => {
-            if (!siteHasAds) return;
+            if (!isSiteHasAds()) return;
             if (e.hashChange || e.downloadRequest) return;
             if (bypassNext) { bypassNext = false; return; }
             try {
@@ -280,7 +300,19 @@
     };
 
     const handleLinkEvent = (e) => {
-        if (!e.isTrusted || popupPending) return;
+        if (popupPending) return;
+
+        if (!e.isTrusted) {
+            const a = e.composedPath().find(el => el.tagName === 'A');
+            if (a && a.href) {
+                if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
+                const action = checkCrossOriginPopup(a.href);
+                if (action === 'BLOCK') { stopEvent(e); return; }
+                if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_self', '', true); return; }
+            }
+            return;
+        }
+
         if (e.type === 'auxclick' && e.button !== 1) return;
         const a = e.composedPath().find(el => el.tagName === 'A');
         if (!a || !a.href) return;
@@ -288,10 +320,18 @@
         if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
 
         const forceNewTab = e.type === 'auxclick';
-        if (!forceNewTab && !isNewTabTarget(getEffectiveTarget(a))) return;
+        if (!forceNewTab && !isNewTabTarget(getEffectiveTarget(a))) {
+            if (e.type === 'click' && popupBlockedDuringClick) {
+                const action = checkCrossOriginPopup(a.href);
+                if (action === 'BLOCK') { stopEvent(e); return; }
+                if (action === 'ASK') { stopEvent(e); askPopup(a.href, '_self', '', true); return; }
+            }
+            return;
+        }
 
-        const action = checkCrossOriginPopup(a.href);
-        if (action === 'BLOCK') { stopEvent(e); return; }
+        let action = checkCrossOriginPopup(a.href);
+        if (action === 'BLOCK') action = 'ASK';
+
         if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_blank', ''); }
     };
 
@@ -299,22 +339,33 @@
     document.addEventListener('click', handleLinkEvent, true);
     document.addEventListener('auxclick', handleLinkEvent, true);
 
+    document.addEventListener('click', (e) => {
+        if (!popupBlockedDuringClick || !e.isTrusted || isReplayingClick) return;
+        const a = e.composedPath().find(el => el.tagName === 'A');
+        if (!a || !a.href) return;
+        const action = checkCrossOriginPopup(a.href);
+        if (action === 'BLOCK') { e.preventDefault(); return; }
+        if (action === 'ASK') { e.preventDefault(); askPopup(a.href, '_self', '', true); }
+    }, false);
+
     const originalClick = HTMLElement.prototype.click;
     HTMLElement.prototype.click = function () {
-        if (this.tagName === 'A' && this.href && isNewTabTarget(getEffectiveTarget(this))) {
+        if (this.tagName === 'A' && this.href) {
+            if (getNavAction(this.href) === 'BLOCK') return;
             const action = checkCrossOriginPopup(this.href);
             if (action === 'BLOCK') return;
-            if (action === 'ASK') { askPopup(this.href, this.target || '_blank', ''); return; }
+            if (action === 'ASK') { askPopup(this.href, this.target || '_self', ''); return; }
         }
         return originalClick.call(this);
     };
 
     const originalSubmit = HTMLFormElement.prototype.submit;
     HTMLFormElement.prototype.submit = function () {
-        if (this.action && isNewTabTarget((this.target || '').toLowerCase())) {
+        if (this.action) {
+            if (getNavAction(this.action) === 'BLOCK') return;
             const action = checkCrossOriginPopup(this.action);
             if (action === 'BLOCK') return;
-            if (action === 'ASK') { askPopup(this.action, this.target || '_blank', ''); return; }
+            if (action === 'ASK') { askPopup(this.action, this.target || '_self', ''); return; }
         }
         if (!this.isConnected) return;
         return originalSubmit.call(this);
@@ -323,10 +374,11 @@
     if (HTMLFormElement.prototype.requestSubmit) {
         const orig = HTMLFormElement.prototype.requestSubmit;
         HTMLFormElement.prototype.requestSubmit = function (s) {
-            if (this.action && isNewTabTarget((s?.formTarget || this.target || '').toLowerCase())) {
+            if (this.action) {
+                if (getNavAction(this.action) === 'BLOCK') return;
                 const action = checkCrossOriginPopup(this.action);
                 if (action === 'BLOCK') return;
-                if (action === 'ASK') { askPopup(this.action, this.target || '_blank', ''); return; }
+                if (action === 'ASK') { askPopup(this.action, this.target || '_self', ''); return; }
             }
             if (!this.isConnected) return;
             return orig.call(this, s);

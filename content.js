@@ -18,7 +18,20 @@ const syncData = async () => {
     document.documentElement.setAttribute("data-pg-nbl", JSON.stringify(nbl));
 };
 
+const syncAdFlag = async () => {
+    if (window !== window.top) return;
+    let host;
+    try { host = location.hostname.toLowerCase(); } catch (_) { return; }
+    if (!host) return;
+    const data = await chrome.storage.local.get('adSites');
+    const adSites = data.adSites || [];
+    if (adSites.includes(host)) {
+        document.documentElement.setAttribute('data-pg-ads', '1');
+    }
+};
+
 syncData();
+syncAdFlag();
 chrome.storage.onChanged.addListener(syncData);
 
 const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
@@ -36,11 +49,20 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
 
     const shadow = container.attachShadow({ mode: "open" });
     const iconUrl = chrome.runtime.getURL("app_icon_128.png");
+    const pbl = JSON.parse(document.documentElement.getAttribute('data-pg-pbl') || '[]');
+    const isSourceBlocked = checkMatch(source, pbl);
+
+    const actionText = isSourceBlocked 
+        ? `<b>${source}</b> is a blocked site. You clicked an external link to:`
+        : `<b>${source}</b> is trying to automatically open a ${isNav ? 'new page' : 'new tab'}:`;
+
+    const btnAllowText = isSourceBlocked ? 'Open Link' : 'Allow this time';
+    const btnBlockText = isSourceBlocked ? 'Cancel' : 'Block this time';
 
     shadow.innerHTML = `
         <style>
             * { box-sizing: border-box; }
-            .ov { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+            .ov { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; z-index:2147483647; }
             .cd { background:#fff;width:420px;padding:24px 24px 20px;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,0.35);animation:popIn 0.18s cubic-bezier(0.16,1,0.3,1); }
             .hd { display:flex;align-items:center;gap:10px;margin-bottom:6px; }
             .hd img { width:22px;height:22px;flex-shrink:0; }
@@ -66,17 +88,15 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
                     <img src="${iconUrl}">
                     <h3>PopupGuard</h3>
                 </div>
-                <p class="src">
-                    <b>${source}</b> is trying to automatically open a ${isNav ? 'new page' : 'new tab'}:
-                </p>
+                <p class="src">${actionText}</p>
                 <div class="dst-label">Destination URL</div>
                 <div class="dst">${url.length > 150 ? url.substring(0, 150) + '...' : url}</div>
                 <div class="ch-grp">
-                    <label class="ch">
+                    <label class="ch" id="cb-allow-row" ${isSourceBlocked ? 'style="display:none"' : ''}>
                         <input type="checkbox" id="cb-allow">
                         Always allow <b>${source}</b> to open new tabs
                     </label>
-                    <label class="ch">
+                    <label class="ch" id="cb-block-row" ${isSourceBlocked ? 'style="display:none"' : ''}>
                         <input type="checkbox" id="cb-block">
                         Always block <b>${source}</b> from opening new tabs
                     </label>
@@ -86,8 +106,8 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
                     </label>
                 </div>
                 <div class="btns">
-                    <button class="btn btn-allow" id="btn-open">Allow this time</button>
-                    <button class="btn btn-block" id="btn-block">Block this time</button>
+                    <button class="btn btn-allow" id="btn-open">${btnAllowText}</button>
+                    <button class="btn btn-block" id="btn-block">${btnBlockText}</button>
                 </div>
             </div>
         </div>`;
@@ -224,5 +244,16 @@ window.addEventListener("message", e => {
         const source = e.data.source || getHost(e.data.url);
         if (source === 'unknown') return;
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);
+    }
+    if (e.data?.action === 'PG_SITE_HAS_ADS') {
+        const host = location.hostname.toLowerCase();
+        if (!host) return;
+        chrome.storage.local.get('adSites', data => {
+            const adSites = data.adSites || [];
+            if (!adSites.includes(host)) {
+                adSites.push(host);
+                chrome.storage.local.set({ adSites });
+            }
+        });
     }
 });

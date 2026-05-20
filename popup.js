@@ -44,16 +44,12 @@ function isDomainInList(domain, list) {
     });
 }
 
-// ── Tag labels ──
-
 const TAG_CONFIG = {
     popupBlock: { cls: 'tag-block', label: 'Blocked' },
     popupAllow: { cls: 'tag-allow', label: 'Allowed' },
-    navBlock:   { cls: 'tag-nav',   label: 'Network' },
-    builtin:    { cls: 'tag-builtin', label: 'Default' }
+    navBlock: { cls: 'tag-nav', label: 'Network' },
+    builtin: { cls: 'tag-builtin', label: 'Default' }
 };
-
-// ── Filter → add-section sync ──
 
 const FILTER_TO_TYPE = {
     all: 'popupBlock',
@@ -80,8 +76,6 @@ function syncAddSection() {
     }
 }
 
-// ── Unified list rendering ──
-
 function renderAll() {
     loadStaticAllowlist().then(builtinList => {
         chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], data => {
@@ -89,21 +83,21 @@ function renderAll() {
             const pal = data.popupAllow || [];
             const nbl = data.navBlock || [];
 
-            // Build unified items
+
             const items = [];
             pbl.forEach(d => items.push({ domain: d, type: 'popupBlock' }));
             pal.forEach(d => items.push({ domain: d, type: 'popupAllow' }));
             nbl.forEach(d => items.push({ domain: d, type: 'navBlock' }));
             builtinList.forEach(d => items.push({ domain: d, type: 'builtin' }));
 
-            // Update tab counts
+
             document.getElementById('count-all').textContent = pbl.length + pal.length + nbl.length + builtinList.length;
             document.getElementById('count-block').textContent = pbl.length;
             document.getElementById('count-allow').textContent = pal.length;
             document.getElementById('count-nav').textContent = nbl.length;
             document.getElementById('count-builtin').textContent = builtinList.length;
 
-            // Filter
+
             let filtered = items;
             if (currentFilter !== 'all') {
                 filtered = items.filter(i => i.type === currentFilter);
@@ -113,7 +107,7 @@ function renderAll() {
                 filtered = filtered.filter(i => i.domain.toLowerCase().includes(q));
             }
 
-            // Render
+
             const container = document.getElementById('domain-list');
             const emptyMsg = document.getElementById('empty-msg');
             container.innerHTML = '';
@@ -152,7 +146,7 @@ function renderAll() {
                 container.appendChild(row);
             });
 
-            // Update status card
+
             updateStatusCard(pbl, pal, nbl);
         });
     });
@@ -195,7 +189,7 @@ function addDomain(input, targetKey) {
     });
 }
 
-// ── Status Card ──
+
 
 var currentHost = null;
 
@@ -220,7 +214,7 @@ function clearHostRules() {
         chrome.storage.sync.set({
             popupBlock: filterRule(data.popupBlock, currentHost),
             popupAllow: filterRule(data.popupAllow, currentHost),
-            navBlock:   filterRule(data.navBlock,   currentHost)
+            navBlock: filterRule(data.navBlock, currentHost)
         }, renderAll);
     });
 }
@@ -274,7 +268,7 @@ function initStatusCard() {
     });
 }
 
-// ── Init ──
+
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ext-version').textContent = 'v' + chrome.runtime.getManifest().version;
@@ -282,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initStatusCard();
     renderAll();
 
-    // Filter tabs
+
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -293,13 +287,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Search
+
     document.getElementById('search-input').addEventListener('input', e => {
         searchQuery = e.target.value.trim();
         renderAll();
     });
 
-    // Add domain
+
     document.getElementById('add-btn').onclick = () => {
         const domain = document.getElementById('new-domain').value;
         const type = document.getElementById('new-type').value;
