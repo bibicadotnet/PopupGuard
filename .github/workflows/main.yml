@@ -54,7 +54,7 @@ jobs:
             -x "*.git*" \
                ".github/*" \
                "LICENSE" \
-               "README.md"
+               "*.md"
 
           # Upload asset
           gh release upload "$TAG_NAME" "$ZIP_NAME" --clobber
