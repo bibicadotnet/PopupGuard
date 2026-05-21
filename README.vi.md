@@ -8,14 +8,32 @@
 
 ## Tính năng Cốt lõi
 
-Thay vì chặn mù quáng mọi thứ và làm hỏng các trang web bạn đang dùng, tiện ích này sẽ tạm dừng hành động đó lại và hiển thị một hộp thoại xác nhận rõ ràng ngay trên trang. Bạn sẽ là người quyết định điều gì xảy ra tiếp theo:
+Khi một trang web cố mở tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại cảnh báo sẽ hiện ra ngay trong tab hiện tại.
 
-- **Hành động một lần:** Chấp nhận (**Cho phép**) hoặc từ chối (**Chặn**) popup chỉ cho một lần click đó.
-- **Quy tắc vĩnh viễn Thông minh:** Tích vào ô trước khi click để ghi nhớ lựa chọn của bạn mãi mãi.
-  - **Luôn Cho phép / Chặn:** Thiết lập quy tắc popup vĩnh viễn cho trang web bạn đang truy cập.
-  - **Chặn ở cấp độ Mạng (Network-Level):** Nếu một trang web cố chuyển hướng bạn đến một đích đến hoàn toàn khác (và thường là mờ ám), bạn có thể chọn chặn tất cả các yêu cầu mạng trong tương lai (script, hình ảnh, iframe) tới tên miền đích đó.
+### Nút Hành động
+* **Allow this time** (Xanh lá): Cho phép yêu cầu này một lần.
+* **Block this time** (Đỏ): Chặn yêu cầu này một lần.
 
-> **Lưu ý:** Các tên miền quan trọng đáng tin cậy như Google, Facebook và các ngân hàng lớn được bảo vệ thông qua một danh sách an toàn (safe list) tích hợp sẵn để đảm bảo việc duyệt web hàng ngày của bạn không bao giờ bị ảnh hưởng.
+### Checkbox (Ghi nhớ quy tắc)
+Lựa chọn của bạn sẽ được lưu lại (bạn có thể thay đổi hoặc xóa bất cứ lúc nào qua biểu tượng tiện ích). Khi đánh dấu vào một ô, lựa chọn đối nghịch sẽ tự động bị bỏ chọn:
+* **Always allow `[nguồn]` to open new tabs**: Tự động cho phép mọi nỗ lực mở tab/cửa sổ mới từ tên miền nguồn này trong tương lai.
+* **Always block `[nguồn]` from opening new tabs**: Các yêu cầu tự động mở popup (bằng mã ngầm) từ tên miền nguồn này sẽ bị âm thầm chặn lại. Tuy nhiên, nếu bạn **tự tay click (click vật lý)** vào một liên kết, hệ thống vẫn sẽ hiện hộp thoại hỏi để đảm bảo không chặn nhầm các liên kết hợp lệ.
+* **Block all network requests to `[đích]`**: Tất cả các kết nối đến tên miền đích (script, hình ảnh, iframe, điều hướng...) sẽ bị chặn hoàn toàn ở tầng mạng (cấp độ DNS). Trang sẽ tự động tải lại sau khi bạn nhấn nút *Block this time* để áp dụng quy tắc.
+
+*(Lưu ý: Các tên miền đi tới danh sách trắng như shopee.vn, tiktok.com, v.v. sẽ tự động được bỏ qua).*
+
+---
+
+## Bảng điều khiển (Popup tiện ích)
+
+Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý thủ công:
+
+- **Current Tab:** Xem và thay đổi nhanh quy tắc của tab hiện tại.
+- **Allowed / Blocked:** Quản lý danh sách các trang được phép hoặc bị chặn mở popup.
+- **Network:** Danh sách các trang bị chặn hoàn toàn ở cấp độ mạng/DNS.
+- **Default:** Danh sách trắng các trang uy tín (Google, Facebook...), luôn được phép và không thể chặn.
+- **Thêm thủ công:** Hỗ trợ tên miền (`example.com`) hoặc wildcard (`*.example.com`). Ở tab **All**, cho phép thêm rule bằng tùy chọn. Các tab khác, domain thêm vào sẽ mặc định ở tab đó.
+- **Tìm kiếm & Xóa:** Lọc và xóa nhanh các quy tắc.
 
 ---
 
@@ -28,27 +46,15 @@ Thay vì chặn mù quáng mọi thứ và làm hỏng các trang web bạn đan
 
 ---
 
-## Quản lý Đơn giản & Nhanh chóng
+## Trải nghiệm sử dụng
 
-Nhấn vào biểu tượng tiện ích trên thanh công cụ để xem bảng điều khiển. Thành thật mà nói, không có nhiều thứ để cấu hình—việc quản lý các quy tắc trực tiếp thông qua các cảnh báo hộp thoại thường là quá đủ. Nhưng khi bạn cần, bảng điều khiển sẽ cung cấp:
-
-- **Thẻ trạng thái Trực tiếp:** Xem ngay quy tắc đang được áp dụng cho tab hiện tại của bạn và thay đổi nó ngay lập tức.
-- **Phân loại theo Tab:** Lọc nhanh các quy tắc tùy chỉnh của bạn theo mức độ *Cho phép* (Allowed), *Đã chặn* (Blocked), hoặc *Mạng* (Network).
-- **Nhập thủ công Nâng cao:** Thêm các quy tắc tùy chỉnh bằng tên miền chính xác (`example.com`) hoặc ký tự đại diện (`*.example.com`).
-- **Tìm kiếm Siêu tốc:** Tìm và xóa ngay lập tức bất kỳ quy tắc nào nếu bạn lỡ thao tác nhầm.
+Sau khi cài đặt, bạn hiếm khi cần mở bảng điều khiển. Các hộp thoại cảnh báo sẽ xuất hiện trực tiếp ngay trên trang web để bạn xử lý nhanh (Cho phép/Chặn) mà không làm gián đoạn việc lướt web.
 
 ---
 
-## Điều tuyệt vời nhất?
+## Quyền riêng tư & Bảo mật
 
-**Cài đặt một lần và quên nó đi.** Bạn sẽ hiếm khi cần mở bảng điều khiển của tiện ích. Hộp thoại xuất hiện trực tiếp đã xử lý 99% công việc một cách mượt mà trong lúc bạn lướt web. Chỉ cần cho phép những gì bạn cần, chặn những gì bạn không muốn, và để tiện ích lo phần còn lại.
-
----
-
-## Quyền riêng tư & Cấp quyền
-
-PopupGuard được xây dựng với ưu tiên hàng đầu là quyền riêng tư. Tiện ích chạy hoàn toàn cục bộ trên máy tính của bạn.
-
-* **Không chạy mã từ xa:** Tất cả các đoạn mã (script) đều được đóng gói cục bộ.
-* **Không theo dõi:** Chúng tôi không thu thập, truyền tải hoặc bán lịch sử duyệt web của bạn.
-* **Lưu trữ Cục bộ:** Các quy tắc tùy chỉnh của bạn được lưu bằng API `storage.sync` tích hợp sẵn trên trình duyệt.
+Tiện ích hoạt động hoàn toàn offline trên thiết bị của bạn:
+* **Không chạy mã từ xa:** Toàn bộ mã nguồn được đóng gói và chạy cục bộ.
+* **Không theo dõi:** Không thu thập hay gửi lịch sử duyệt web ra bên ngoài.
+* **Lưu trữ an toàn:** Các quy tắc được lưu trực tiếp bằng tính năng `storage.sync` của trình duyệt.

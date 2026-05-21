@@ -2,52 +2,59 @@
 
 **[🇻🇳 Tiếng Việt](README.vi.md)**
 
-> **Take control of your browsing experience.** This extension intercepts unwanted popups, forced new tabs, and sneaky redirects, giving you the final say before anything opens.
+> **Take back control of your browsing experience.** This extension stops unwanted popups, automatic new tabs, and sneaky redirects, giving you the final say before any page opens.
 
 ---
 
 ## Core Features
 
-Instead of blindly blocking everything and breaking the websites you use, the extension pauses the action and displays a clean, in-page confirmation dialog. You decide what happens next:
+When a website tries to open a new tab, window, or navigate to another page, an alert dialog will appear directly in the current tab.
 
-- **One-time Action:** Approve (**Allow**) or deny (**Block**) the popup just for a specific click.
-- **Smart Permanent Rules:** Check a box before clicking to remember your choice forever.
-  - **Always Allow / Block:** Set permanent popup rules for the website you are currently on.
-  - **Network-Level Kill Switch:** If a site tries to redirect you to a completely different (and often shady) destination, you can choose to block all future network requests (scripts, images, frames) to that destination domain.
+### Action Buttons
+* **Allow this time** (Green): Allow the request once.
+* **Block this time** (Red): Block the request once.
 
-> **Note:** Essential trusted domains like Google, Facebook, and major banks are protected via a built-in safe list to ensure your daily browsing never breaks.
+### Checkboxes (Remember Rules)
+Your choice will be saved (you can change or delete it anytime via the extension popup). Checking one option will automatically uncheck its opposite:
+* **Always allow `[source]` to open new tabs**: Automatically allow all future attempts to open new tabs/windows from this source domain.
+* **Always block `[source]` from opening new tabs**: Programmatic requests to open new tabs/windows from this source domain will be silently blocked. However, if you **physically click** a link, the system will still prompt you (ASK) to ensure legitimate links are not blocked by mistake.
+* **Block all network requests to `[destination]`**: All connections to the destination domain (scripts, images, iframes, navigation...) will be completely blocked at the network level (DNS level). The page will automatically reload after you click the *Block this time* button to apply the rule.
+
+*(Note: Domains in the whitelist such as shopee.vn, tiktok.com, etc., will be automatically bypassed).*
 
 ---
 
-## Installation
-1. Download and extract **[PopupGuard.zip](https://github.com/bibicadotnet/PopupGuard/releases/latest/download/PopupGuard.zip)**.
+## Dashboard (Extension Popup)
+
+Click on the extension icon in the toolbar to manually manage rules:
+
+- **Current Tab:** View and quickly change the rule for the current tab.
+- **Allowed / Blocked:** Manage the list of domains allowed or blocked from opening popups.
+- **Network:** List of domains completely blocked at the network/DNS level.
+- **Default:** A whitelist of trusted domains (Google, Facebook...), which are always allowed and cannot be blocked.
+- **Manual Add:** Supports domains (`example.com`) or wildcards (`*.example.com`). In the **All** tab, allows adding rules by option. Other tabs, the added domain will default to that tab.
+- **Search & Delete:** Quickly filter and remove rules.
+
+---
+
+## Installation Guide
+
+1. Download and extract the **[PopupGuard.zip](https://github.com/bibicadotnet/PopupGuard/releases/latest/download/PopupGuard.zip)** file.
 2. Open `chrome://extensions/` in your browser.
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the extracted folder.
 
 ---
 
-## Simple & Fast Management
+## User Experience
 
-Click the extension icon in your toolbar to view your dashboard. Honestly, there isn't much to configure—managing rules on-the-fly through the active dialog alerts is usually more than enough. But when you need it, the dashboard offers:
-
-- **Live Status Card:** Instantly see the rule applied to your active tab and toggle it on the fly.
-- **Categorized Tabs:** Quickly filter your custom rules by *Allowed*, *Blocked*, or *Network* level.
-- **Advanced Manual Input:** Add custom rules using exact domains (`example.com`) or wildcards (`*.example.com`).
-- **Lightning Search:** Instantly find and delete any rule if you made a mistake.
+Once installed, you'll rarely need to open the dashboard. Alert dialogs appear directly on the page, letting you quickly handle them (Allow/Block) without interrupting your browsing flow.
 
 ---
 
-## The Best Part?
+## Privacy & Security
 
-**Set it and forget it.** You rarely need to open the extension dashboard. The on-the-fly dialog handles 99% of the work seamlessly as you browse. Just allow what you need, block what you don't, and let the extension handle the rest.
-
----
-
-## Privacy & Permissions
-
-PopupGuard is built with privacy in mind. It runs entirely locally on your machine.
-
-* **No Remote Code:** All scripts are bundled locally.
-* **No Tracking:** We do not collect, transmit, or sell your browsing history.
-* **Local Storage:** Your custom rules are saved using your browser's built-in `storage.sync` API.
+The extension works completely offline on your device:
+* **No remote code execution:** All source code is bundled and runs locally.
+* **No tracking:** We do not collect or send your browsing history anywhere.
+* **Secure storage:** Your rules are saved directly using your browser's built-in `storage.sync` API.
