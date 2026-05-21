@@ -46,8 +46,8 @@ jobs:
           # Create release if not exists
           gh release view "$TAG_NAME" > /dev/null 2>&1 || \
           gh release create "$TAG_NAME" \
-            --title "Release $TAG_NAME" \
-            --notes "Auto-generated release from manifest.json"
+            --title "$TAG_NAME" \
+            --generate-notes
 
           # Create ZIP package
           zip -r "$ZIP_NAME" . \
