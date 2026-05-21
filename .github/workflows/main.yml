@@ -11,6 +11,7 @@ permissions:
 jobs:
   build-and-sync:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,38 +22,58 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Filename set to PopupGuard.zip
-          ZIP_NAME="PopupGuard.zip"
-          
-          # Determine the TAG_NAME
-          TAG_NAME=${{ github.event.release.tag_name }}
-          if [ -z "$TAG_NAME" ]; then
-            git fetch --tags
-            TAG_NAME=$(git tag --sort=-v:refname | head -n 1 || echo "v1.0")
+          # Get repository name
+          REPO_NAME=$(basename "${{ github.repository }}")
+
+          # ZIP filename = Repository name
+          ZIP_NAME="${REPO_NAME}.zip"
+
+          # Read version from manifest.json
+          VERSION=$(jq -r '.version' manifest.json)
+
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "Cannot read version from manifest.json"
+            exit 1
           fi
 
-          echo "Target Tag: $TAG_NAME"
+          TAG_NAME="v$VERSION"
 
-          # Ensure the release exists before uploading
-          gh release view "$TAG_NAME" > /dev/null 2>&1 || gh release create "$TAG_NAME" --title "Release $TAG_NAME" --notes "Auto-generated release"
+          echo "Repository : $REPO_NAME"
+          echo "ZIP Name   : $ZIP_NAME"
+          echo "Version    : $VERSION"
+          echo "Tag        : $TAG_NAME"
 
-          # Create the zip package
-          zip -r "$ZIP_NAME" . -x "LICENSE" "README.md" ".git*" ".github*"
-          
-          # Upload asset to the determined tag
+          # Create release if not exists
+          gh release view "$TAG_NAME" > /dev/null 2>&1 || \
+          gh release create "$TAG_NAME" \
+            --title "Release $TAG_NAME" \
+            --notes "Auto-generated release from manifest.json"
+
+          # Create ZIP package
+          zip -r "$ZIP_NAME" . \
+            -x "*.git*" \
+               ".github/*" \
+               "LICENSE" \
+               "README.md"
+
+          # Upload asset
           gh release upload "$TAG_NAME" "$ZIP_NAME" --clobber
-          
-          # Output the permanent 'latest' download link
-          echo "Download URL: https://github.com/${{ github.repository }}/releases/latest/download/$ZIP_NAME"
+
+          # Latest download URL
+          echo "Download URL:"
+          echo "https://github.com/${{ github.repository }}/releases/latest/download/$ZIP_NAME"
 
       - name: Update latest branch
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
+          # Read version from manifest.json
+          VERSION=$(jq -r '.version' manifest.json)
+          TAG_NAME="v$VERSION"
+
           git fetch --tags
-          TAG_NAME=$(git tag --sort=-v:refname | head -n 1 || echo "v1.0")
-          
+
           git checkout latest 2>/dev/null || git checkout -b latest
           git reset --hard "$TAG_NAME"
           git push origin latest --force
