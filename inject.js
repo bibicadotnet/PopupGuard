@@ -13,18 +13,21 @@
         const pbl = JSON.parse(document.documentElement.getAttribute('data-pg-pbl') || '[]');
 
         let topHost;
-        try {
-            topHost = new URL(window.top.location.href).hostname.toLowerCase();
-        } catch (e) {
-            if (window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) {
-                try {
-                    topHost = new URL(window.location.ancestorOrigins[window.location.ancestorOrigins.length - 1]).hostname.toLowerCase();
-                } catch (err) { }
+        if (window.top === window) {
+            topHost = location.hostname.toLowerCase();
+        } else {
+            try {
+                topHost = window.top.location.hostname.toLowerCase();
+            } catch (_) {
+                if (window.location.ancestorOrigins?.length > 0) {
+                    try {
+                        topHost = new URL(window.location.ancestorOrigins[window.location.ancestorOrigins.length - 1]).hostname.toLowerCase();
+                    } catch (_) { }
+                }
             }
         }
 
         if (!topHost) return 'ASK';
-
         if (checkMatch(topHost, pal)) return 'ALLOW';
         if (checkMatch(topHost, pbl)) return 'BLOCK';
         return 'ASK';
@@ -94,6 +97,8 @@
     };
 
     window.addEventListener('message', e => {
+        if (e.source !== window) return;
+        if (!e.data || typeof e.data !== 'object') return;
         if (e.data?.action === 'PG_DIALOG_CLOSED') {
             popupPending = false;
             unfreezePage();
@@ -271,6 +276,8 @@
     const navToken = Math.random().toString(36).slice(2);
     document.documentElement.setAttribute('data-pg-nav-token', navToken);
     window.addEventListener('message', e => {
+        if (e.source !== window) return;
+        if (!e.data || typeof e.data !== 'object') return;
         if (e.data?.action === 'PG_DO_NAV' && e.data.token === navToken) {
             bypassNext = true;
             if (origAssign) origAssign.call(location, e.data.url);
@@ -576,7 +583,7 @@
                 }).observe(d, { childList: true });
             }
 
-            if (w.Document && w.Document.prototype) {
+            if (w.Document && w.Document.prototype && !w.Document.prototype.write._pgHooked) {
                 const wOrigWrite = w.Document.prototype.write;
                 const wOrigWriteln = w.Document.prototype.writeln;
                 w.Document.prototype.write = function (...args) {
@@ -584,11 +591,13 @@
                     attachDocListeners(this);
                     return r;
                 };
+                w.Document.prototype.write._pgHooked = true;
                 w.Document.prototype.writeln = function (...args) {
                     const r = wOrigWriteln.apply(this, args);
                     attachDocListeners(this);
                     return r;
                 };
+                w.Document.prototype.writeln._pgHooked = true;
             }
         } catch (_) { }
 
@@ -645,8 +654,6 @@
         }
     }).observe(document, { childList: true, subtree: true });
 
-    const origDocWrite = Document.prototype.write;
-    const origDocWriteln = Document.prototype.writeln;
     const checkDocReset = (doc) => {
         if (!doc) return;
         if (doc === document && document.documentElement && currentDocEl !== document.documentElement) {
@@ -657,15 +664,25 @@
             attachDocListeners(doc);
         }
     };
-    Document.prototype.write = function (...args) {
-        const r = origDocWrite.apply(this, args);
-        checkDocReset(this);
-        return r;
-    };
-    Document.prototype.writeln = function (...args) {
-        const r = origDocWriteln.apply(this, args);
-        checkDocReset(this);
-        return r;
-    };
+
+    if (!Document.prototype.write._pgHooked) {
+        const origDocWrite = Document.prototype.write;
+        Document.prototype.write = function (...args) {
+            const r = origDocWrite.apply(this, args);
+            checkDocReset(this);
+            return r;
+        };
+        Document.prototype.write._pgHooked = true;
+    }
+
+    if (!Document.prototype.writeln._pgHooked) {
+        const origDocWriteln = Document.prototype.writeln;
+        Document.prototype.writeln = function (...args) {
+            const r = origDocWriteln.apply(this, args);
+            checkDocReset(this);
+            return r;
+        };
+        Document.prototype.writeln._pgHooked = true;
+    }
 
 })();

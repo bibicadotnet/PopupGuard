@@ -1,21 +1,40 @@
 "use strict";
 
+let _cachedStaticList = null;
+
+const getHost = url => {
+    try { return new URL(url.startsWith('http') ? url : 'http://' + url).hostname.toLowerCase(); }
+    catch (e) { return 'unknown'; }
+};
+
+const checkMatch = (host, list) => {
+    if (!host || !list) return false;
+    return list.some(x => x.startsWith('*.')
+        ? (host === x.slice(2) || host.endsWith('.' + x.slice(2)))
+        : host === x);
+};
+
 const loadLists = async () => {
-    const staticList = await fetch(chrome.runtime.getURL("allowlist.json"))
-        .then(r => r.json()).catch(() => []);
+    if (!_cachedStaticList) {
+        const fetched = await fetch(chrome.runtime.getURL("allowlist.json"))
+            .then(r => r.json()).catch(() => null);
+        if (fetched) _cachedStaticList = fetched; // chỉ cache khi thành công
+    }
     const data = await chrome.storage.sync.get(["popupAllow", "popupBlock", "navBlock"]);
     return {
-        pal: [...new Set([...staticList, ...(data.popupAllow || [])])],
+        pal: [...new Set([...(_cachedStaticList || []), ...(data.popupAllow || [])])],
         pbl: data.popupBlock || [],
         nbl: data.navBlock || []
     };
 };
 
 const syncData = async () => {
-    const { pal, pbl, nbl } = await loadLists();
-    document.documentElement.setAttribute("data-pg-pal", JSON.stringify(pal));
-    document.documentElement.setAttribute("data-pg-pbl", JSON.stringify(pbl));
-    document.documentElement.setAttribute("data-pg-nbl", JSON.stringify(nbl));
+    try {
+        const { pal, pbl, nbl } = await loadLists();
+        document.documentElement.setAttribute("data-pg-pal", JSON.stringify(pal));
+        document.documentElement.setAttribute("data-pg-pbl", JSON.stringify(pbl));
+        document.documentElement.setAttribute("data-pg-nbl", JSON.stringify(nbl));
+    } catch (_) { }
 };
 
 const syncAdFlag = async () => {
@@ -23,16 +42,21 @@ const syncAdFlag = async () => {
     let host;
     try { host = location.hostname.toLowerCase(); } catch (_) { return; }
     if (!host) return;
-    const data = await chrome.storage.local.get('adSites');
-    const adSites = data.adSites || [];
-    if (adSites.includes(host)) {
-        document.documentElement.setAttribute('data-pg-ads', '1');
-    }
+    try {
+        const data = await chrome.storage.local.get('adSites');
+        const adSites = data.adSites || [];
+        if (adSites.includes(host)) {
+            document.documentElement.setAttribute('data-pg-ads', '1');
+        }
+    } catch (_) { }
 };
 
 syncData();
 syncAdFlag();
-chrome.storage.onChanged.addListener(syncData);
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync') syncData();
+    if (area === 'local' && changes.adSites) syncAdFlag();
+});
 
 const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const destHost = getHost(url);
@@ -45,7 +69,7 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const container = document.createElement("div");
     container.id = "pg-container";
     container.style.cssText = "position:fixed !important;top:0 !important;left:0 !important;z-index:2147483647 !important;width:0 !important;height:0 !important;display:block !important;";
-    document.body.appendChild(container);
+    (document.body || document.documentElement).appendChild(container);
 
     const shadow = container.attachShadow({ mode: "open" });
     const iconUrl = chrome.runtime.getURL("app_icon_128.png");
@@ -146,7 +170,6 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
         if (cbBlock.checked) cbAllow.checked = false;
         updateButtons();
     };
-    cbDest.onchange = updateButtons;
 
     const closeDialog = () => {
         container.remove();
@@ -192,24 +215,32 @@ const saveSource = (source, action) => {
             list.push(source); return list;
         });
         updateAttr('data-pg-pbl', list => list.filter(x => x !== source));
-        chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
-            const pal = data.popupAllow || [];
-            const pbl = (data.popupBlock || []).filter(x => x !== source);
-            if (!pal.includes(source)) pal.push(source);
-            chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl });
-        });
+        try {
+            chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
+                try {
+                    const pal = data.popupAllow || [];
+                    const pbl = (data.popupBlock || []).filter(x => x !== source);
+                    if (!pal.includes(source)) pal.push(source);
+                    chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl });
+                } catch (_) { }
+            });
+        } catch (_) { }
     } else {
         updateAttr('data-pg-pbl', list => {
             if (list.includes(source)) return null;
             list.push(source); return list;
         });
         updateAttr('data-pg-pal', list => list.filter(x => x !== source));
-        chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
-            const pbl = data.popupBlock || [];
-            const pal = (data.popupAllow || []).filter(x => x !== source);
-            if (!pbl.includes(source)) pbl.push(source);
-            chrome.storage.sync.set({ popupBlock: pbl, popupAllow: pal });
-        });
+        try {
+            chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
+                try {
+                    const pbl = data.popupBlock || [];
+                    const pal = (data.popupAllow || []).filter(x => x !== source);
+                    if (!pbl.includes(source)) pbl.push(source);
+                    chrome.storage.sync.set({ popupBlock: pbl, popupAllow: pal });
+                } catch (_) { }
+            });
+        } catch (_) { }
     }
 };
 
@@ -218,42 +249,41 @@ const saveDestBlock = (host) => {
         if (list.includes(host)) return null;
         list.push(host); return list;
     });
-    chrome.storage.sync.get(['navBlock'], data => {
-        const nbl = data.navBlock || [];
-        if (!nbl.includes(host)) {
-            nbl.push(host);
-            chrome.storage.sync.set({ navBlock: nbl });
-        }
-    });
-};
-
-const getHost = url => {
-    try { return new URL(url.startsWith('http') ? url : 'http://' + url).hostname.toLowerCase(); }
-    catch (e) { return 'unknown'; }
-};
-
-const checkMatch = (host, list) => {
-    if (!host || !list) return false;
-    return list.some(x => x.startsWith('*.')
-        ? (host === x.slice(2) || host.endsWith('.' + x.slice(2)))
-        : host === x);
+    try {
+        chrome.storage.sync.get(['navBlock'], data => {
+            try {
+                const nbl = data.navBlock || [];
+                if (!nbl.includes(host)) {
+                    nbl.push(host);
+                    chrome.storage.sync.set({ navBlock: nbl });
+                }
+            } catch (_) { }
+        });
+    } catch (_) { }
 };
 
 window.addEventListener("message", e => {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.action === 'PG_ASK' && e.source !== window) return;
     if (e.data?.action === 'PG_ASK' || e.data?.action === 'PG_IFRAME') {
         const source = e.data.source || getHost(e.data.url);
         if (source === 'unknown') return;
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);
     }
     if (e.data?.action === 'PG_SITE_HAS_ADS') {
+        if (e.source !== window) return;
         const host = location.hostname.toLowerCase();
         if (!host) return;
-        chrome.storage.local.get('adSites', data => {
-            const adSites = data.adSites || [];
-            if (!adSites.includes(host)) {
-                adSites.push(host);
-                chrome.storage.local.set({ adSites });
-            }
-        });
+        try {
+            chrome.storage.local.get('adSites', data => {
+                try {
+                    const adSites = data.adSites || [];
+                    if (!adSites.includes(host)) {
+                        adSites.push(host);
+                        chrome.storage.local.set({ adSites });
+                    }
+                } catch (_) { }
+            });
+        } catch (_) { }
     }
 });
