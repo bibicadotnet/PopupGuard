@@ -9,28 +9,7 @@
     };
 
     const getPopupAction = () => {
-        const pal = JSON.parse(document.documentElement.getAttribute('data-pg-pal') || '[]');
-        const pbl = JSON.parse(document.documentElement.getAttribute('data-pg-pbl') || '[]');
-
-        let topHost;
-        if (window.top === window) {
-            topHost = location.hostname.toLowerCase();
-        } else {
-            try {
-                topHost = window.top.location.hostname.toLowerCase();
-            } catch (_) {
-                if (window.location.ancestorOrigins?.length > 0) {
-                    try {
-                        topHost = new URL(window.location.ancestorOrigins[window.location.ancestorOrigins.length - 1]).hostname.toLowerCase();
-                    } catch (_) { }
-                }
-            }
-        }
-
-        if (!topHost) return 'ASK';
-        if (checkMatch(topHost, pal)) return 'ALLOW';
-        if (checkMatch(topHost, pbl)) return 'BLOCK';
-        return 'ASK';
+        return document.documentElement.getAttribute('data-pg-popup-action') || 'ASK';
     };
 
     const getNavAction = (url) => {
@@ -44,7 +23,9 @@
 
     let popupPending = false;
     let _siteHasAds = false;
-    const isSiteHasAds = () => _siteHasAds || document.documentElement.getAttribute('data-pg-ads') === '1';
+    const isSiteHasAds = () => _siteHasAds
+        || document.documentElement.getAttribute('data-pg-ads') === '1'
+        || document.documentElement.getAttribute('data-pg-popup-action') === 'BLOCK';
 
     let pendingNav = null;
     let lastMousedownPos = null;
@@ -81,6 +62,8 @@
         document.getElementById('pg-freeze')?.remove();
     };
 
+    let askSafetyTimer = null;
+
     const askPopup = (url, name, specs, isNav = false) => {
         popupPending = true;
         freezePage();
@@ -94,6 +77,20 @@
             source: location.hostname,
             isNav
         }, '*');
+
+        // Safety timeout: if content.js is orphaned (extension updated/reloaded),
+        // the dialog will never appear. Auto-unfreeze after 800ms so the page
+        // doesn't stay permanently locked on already-loaded tabs.
+        clearTimeout(askSafetyTimer);
+        askSafetyTimer = setTimeout(() => {
+            if (!popupPending) return;
+            // Check if dialog actually appeared (content.js creates #pg-container)
+            if (!document.getElementById('pg-container')) {
+                popupPending = false;
+                unfreezePage();
+                pendingNav = null;
+            }
+        }, 800);
     };
 
     window.addEventListener('message', e => {
@@ -205,6 +202,9 @@
         } catch (e) { doNavigate(url); return; }
 
         if (getNavAction(url) === 'BLOCK') return;
+
+        // Only intercept cross-origin navigations if the site has ads
+        if (!isSiteHasAds()) { doNavigate(url); return; }
 
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
@@ -391,8 +391,11 @@
             return;
         }
 
+        // Only intercept trusted clicks on new-tab links if the site has ads.
+        // On clean sites, let all user clicks through normally.
+        if (!isSiteHasAds()) return;
+
         let action = checkCrossOriginPopup(a.href);
-        if (action === 'BLOCK') action = 'ASK';
 
         if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_blank', ''); }
     };
@@ -415,8 +418,8 @@
         }
 
         if (isNewTabTarget(getEffectiveTarget(form))) {
+            if (!isSiteHasAds()) return;
             let action = checkCrossOriginPopup(form.action);
-            if (action === 'BLOCK') action = 'ASK';
             if (action === 'ASK') {
                 stopEvent(e);
                 askPopup(form.action, form.target || '_blank', '');
@@ -673,17 +676,21 @@
 
         proto.appendChild = function (child) {
             const result = origAppendChild.call(this, child);
-            if (child && child.nodeType === 1 && child.tagName === 'A') {
-                child.addEventListener('click', handleLinkEvent, true);
-            }
+            try {
+                if (isSiteHasAds() && child && child.nodeType === 1 && child.tagName === 'A') {
+                    child.addEventListener('click', handleLinkEvent, true);
+                }
+            } catch (_) { }
             return result;
         };
 
         proto.insertBefore = function (child, ref) {
             const result = origInsertBefore.call(this, child, ref);
-            if (child && child.nodeType === 1 && child.tagName === 'A') {
-                child.addEventListener('click', handleLinkEvent, true);
-            }
+            try {
+                if (isSiteHasAds() && child && child.nodeType === 1 && child.tagName === 'A') {
+                    child.addEventListener('click', handleLinkEvent, true);
+                }
+            } catch (_) { }
             return result;
         };
     };
