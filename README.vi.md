@@ -1,5 +1,7 @@
 # PopupGuard
 
+![XS84xGJp](https://img.bibica.net/XS84xGJp.png)
+
 **[🇺🇸 English](README.md)**
 
 > Tiện ích này ngăn chặn các popup không mong muốn, các tab mới tự động mở và các chuyển hướng lén lút, trao cho bạn quyền quyết định cuối cùng
@@ -13,6 +15,8 @@
 ## Tính năng Cốt lõi
 
 Khi một trang web cố mở lén lút tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại cảnh báo sẽ hiện ra ngay trong tab hiện tại.
+
+![rwT0lHDJ](https://img.bibica.net/rwT0lHDJ.png)
 
 ### Nút Hành động
 * **Allow this time** (Xanh lá): Cho phép yêu cầu này một lần.
@@ -29,6 +33,8 @@ Lựa chọn của bạn sẽ được lưu lại (bạn có thể thay đổi h
 ## Bảng điều khiển (Popup tiện ích)
 
 Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý thủ công:
+
+![P2g7510N](https://img.bibica.net/P2g7510N.webp)
 
 - **Current Tab:** Xem và thay đổi nhanh quy tắc của tab hiện tại.
 - **Allowed / Blocked:** Quản lý danh sách các trang được phép hoặc bị chặn mở popup.
