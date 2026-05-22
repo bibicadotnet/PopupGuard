@@ -1,6 +1,6 @@
 {
    "name": "PopupGuard",
-   "version": "1.1.0",
+   "version": "1.1.1",
    "manifest_version": 3,
    "description": "Intercepts unwanted popups and redirects from ad scripts. Ask, allow, or block per domain, at DOM and network level.",
    "icons": {
