@@ -2,13 +2,13 @@
 
 **[🇺🇸 English](README.md)**
 
-> **Kiểm soát trải nghiệm duyệt web của bạn.** Tiện ích này ngăn chặn các popup không mong muốn, các tab mới tự động mở và các chuyển hướng lén lút, trao cho bạn quyền quyết định cuối cùng trước khi bất kỳ trang nào được mở lên.
+> Tiện ích này ngăn chặn các popup không mong muốn, các tab mới tự động mở và các chuyển hướng lén lút, trao cho bạn quyền quyết định cuối cùng
 
 ---
 
 ## Tính năng Cốt lõi
 
-Khi một trang web cố mở tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại cảnh báo sẽ hiện ra ngay trong tab hiện tại.
+Khi một trang web cố mở lén lút tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại cảnh báo sẽ hiện ra ngay trong tab hiện tại.
 
 ### Nút Hành động
 * **Allow this time** (Xanh lá): Cho phép yêu cầu này một lần.
@@ -39,10 +39,7 @@ Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý 
 
 ## Hướng dẫn Cài đặt
 
-1. Tải về và giải nén file **[PopupGuard.zip](https://github.com/bibicadotnet/PopupGuard/releases/latest/download/PopupGuard.zip)**.
-2. Mở `chrome://extensions/` trên trình duyệt của bạn.
-3. Bật **Chế độ dành cho nhà phát triển** (Developer mode).
-4. Nhấn **Tải tiện ích đã giải nén** (Load unpacked) và chọn thư mục vừa được giải nén.
+- Truy cập [PopupGuard](https://chromewebstore.google.com/detail/popupguard/ebpnmjkhlljiilkobejkdbhjjmjmjiaf), cài đặt như 1 plugin thông thường
 
 ---
 
