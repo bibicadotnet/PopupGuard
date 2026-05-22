@@ -285,13 +285,31 @@
         }
     });
 
+    const origPreventDefault = Event.prototype.preventDefault;
+    const origStopPropagation = Event.prototype.stopPropagation;
+    const origStopImmediatePropagation = Event.prototype.stopImmediatePropagation;
+
     const stopEvent = (e) => {
         try {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
+            // Ad scripts may nullify preventDefault (set to undefined) before dispatching.
+            // Always use the prototype method to ensure it works.
+            if (typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            } else {
+                origPreventDefault.call(e);
+            }
+            if (typeof e.stopPropagation === 'function') {
+                e.stopPropagation();
+            } else {
+                origStopPropagation.call(e);
+            }
+            if (typeof e.stopImmediatePropagation === 'function') {
+                e.stopImmediatePropagation();
+            } else {
+                origStopImmediatePropagation.call(e);
+            }
         } catch (_) { }
-        if (e && !e.isTrusted && !e.cancelable && e.type === 'click') {
+        if (e && !e.isTrusted && e.type === 'click') {
             const a = e.composedPath ? e.composedPath().find(el => el.tagName === 'A') : e.target?.closest?.('a');
             if (a && a.href) a.removeAttribute('href');
         }
@@ -336,7 +354,15 @@
         if (e.defaultPrevented && e.type !== 'mousedown') return;
 
         if (!e.isTrusted) {
-            if ((e.metaKey || e.ctrlKey) && e.type === 'click') { stopEvent(e); return; }
+            if ((e.metaKey || e.ctrlKey) && e.type === 'click') {
+                // Ad scripts (popMagic chromeTab) create temp <a>, dispatch fake
+                // click with ctrlKey+metaKey to force open in new tab.
+                // They also set event.preventDefault = undefined to bypass blocks.
+                stopEvent(e);
+                const a = e.composedPath().find(el => el.tagName === 'A');
+                if (a && a.href) a.removeAttribute('href');
+                return;
+            }
             if (e.button !== 0 && e.type !== 'mousedown') { stopEvent(e); return; }
             const a = e.composedPath().find(el => el.tagName === 'A');
             if (a && a.href) {
@@ -635,6 +661,57 @@
         if (el.tagName !== 'IFRAME' && el.tagName !== 'FRAME') return;
         try { protectWindow(el.contentWindow); } catch (_) { }
     };
+
+    // ── Intercept ad scripts that dynamically create <a> elements and
+    //    dispatch fake clicks with ctrlKey/metaKey (popMagic chromeTab technique).
+    //    We hook appendChild/insertBefore so that when a new <a> is added to
+    //    the DOM, we immediately attach our capture-phase listener to it,
+    //    ensuring we run BEFORE the ad script's synthetic dispatchEvent.
+    const hookDomInsertion = (proto) => {
+        const origAppendChild = proto.appendChild;
+        const origInsertBefore = proto.insertBefore;
+
+        proto.appendChild = function (child) {
+            const result = origAppendChild.call(this, child);
+            if (child && child.nodeType === 1 && child.tagName === 'A') {
+                child.addEventListener('click', handleLinkEvent, true);
+            }
+            return result;
+        };
+
+        proto.insertBefore = function (child, ref) {
+            const result = origInsertBefore.call(this, child, ref);
+            if (child && child.nodeType === 1 && child.tagName === 'A') {
+                child.addEventListener('click', handleLinkEvent, true);
+            }
+            return result;
+        };
+    };
+
+    hookDomInsertion(Node.prototype);
+
+    // ── Protect MouseEvent constructor: ad scripts set preventDefault = undefined
+    //    on the event object. We make preventDefault non-configurable/non-writable
+    //    by wrapping the constructor. However, they assign directly on the instance
+    //    AFTER construction, so we use Object.defineProperty on the instance.
+    const OrigMouseEvent = window.MouseEvent;
+    window.MouseEvent = function (type, init) {
+        const evt = new OrigMouseEvent(type, init);
+        // If the event has ctrlKey or metaKey and is synthetic (likely ad trick),
+        // protect preventDefault from being overwritten
+        if (init && (init.ctrlKey || init.metaKey)) {
+            try {
+                Object.defineProperty(evt, 'preventDefault', {
+                    value: Event.prototype.preventDefault,
+                    writable: false,
+                    configurable: false
+                });
+            } catch (_) { }
+        }
+        return evt;
+    };
+    window.MouseEvent.prototype = OrigMouseEvent.prototype;
+    Object.defineProperty(window.MouseEvent, 'name', { value: 'MouseEvent' });
 
     new MutationObserver(mutations => {
         if (document.documentElement && currentDocEl !== document.documentElement) {
