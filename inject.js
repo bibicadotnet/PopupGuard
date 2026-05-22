@@ -719,9 +719,12 @@
     new MutationObserver(mutations => {
         if (document.documentElement && currentDocEl !== document.documentElement) {
             currentDocEl = document.documentElement;
-            document.addEventListener('click', handleLinkEvent, true);
-            document.addEventListener('mousedown', handleLinkEvent, true);
-            document.addEventListener('auxclick', handleLinkEvent, true);
+            // Re-attach all listeners (matches attachDocListeners) when
+            // document.write replaces documentElement. submit is included here
+            // because we no longer hook Document.prototype.write for the main
+            // document (doing so caused false "parser-blocking cross-site script"
+            // warnings in Chrome attributed to inject.js instead of ad scripts).
+            attachDocListeners(document);
         }
         for (const m of mutations) {
             for (const node of m.addedNodes) {
@@ -734,35 +737,17 @@
         }
     }).observe(document, { childList: true, subtree: true });
 
-    const checkDocReset = (doc) => {
-        if (!doc) return;
-        if (doc === document && document.documentElement && currentDocEl !== document.documentElement) {
-            currentDocEl = document.documentElement;
-            attachDocListeners(document);
-        } else if (doc !== document && doc.documentElement && doc._pgCurrentDocEl !== doc.documentElement) {
-            doc._pgCurrentDocEl = doc.documentElement;
-            attachDocListeners(doc);
-        }
-    };
-
-    if (!Document.prototype.write._pgHooked) {
-        const origDocWrite = Document.prototype.write;
-        Document.prototype.write = function (...args) {
-            const r = origDocWrite.apply(this, args);
-            checkDocReset(this);
-            return r;
-        };
-        Document.prototype.write._pgHooked = true;
-    }
-
-    if (!Document.prototype.writeln._pgHooked) {
-        const origDocWriteln = Document.prototype.writeln;
-        Document.prototype.writeln = function (...args) {
-            const r = origDocWriteln.apply(this, args);
-            checkDocReset(this);
-            return r;
-        };
-        Document.prototype.writeln._pgHooked = true;
-    }
+    // ── Main-document reset detection: no document.write hook needed here.
+    //    Hooking Document.prototype.write at the main-document level causes:
+    //    1. Chrome attributes every document.write call (including ad-site calls)
+    //       to inject.js in the stack trace, producing misleading "cross-site
+    //       parser-blocking script via document.write" warnings that blame the
+    //       extension instead of the ad script.
+    //    2. The wrapper prevents Chrome from correctly tracking the originating
+    //       script for its own intervention mechanism, breaking its protection.
+    //    The MutationObserver below replaces this path. submit is added so the
+    //    observer fully covers what the former checkDocReset(document) path did.
+    //    Per-iframe hooks inside protectIframe() are kept because they run in
+    //    the iframe's own window scope and do not affect main-page attribution.
 
 })();
