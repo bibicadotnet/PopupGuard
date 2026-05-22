@@ -1,8 +1,6 @@
 "use strict";
 
 let _cachedStaticList = null;
-let _pal = [];
-let _pbl = [];
 
 const getHost = url => {
     try { return new URL(url.startsWith('http') ? url : 'http://' + url).hostname.toLowerCase(); }
@@ -30,32 +28,11 @@ const loadLists = async () => {
     };
 };
 
-const getTopHost = () => {
-    if (window === window.top) {
-        try { return location.hostname.toLowerCase(); } catch (_) { }
-    } else {
-        try { return window.top.location.hostname.toLowerCase(); } catch (_) {
-            if (location.ancestorOrigins?.length > 0) {
-                try { return new URL(location.ancestorOrigins[location.ancestorOrigins.length - 1]).hostname.toLowerCase(); } catch (_) { }
-            }
-        }
-    }
-    return '';
-};
-
-const computePopupAction = (host) => {
-    if (!host) return 'ASK';
-    if (checkMatch(host, _pal)) return 'ALLOW';
-    if (checkMatch(host, _pbl)) return 'BLOCK';
-    return 'ASK';
-};
-
 const syncData = async () => {
     try {
         const { pal, pbl, nbl } = await loadLists();
-        _pal = pal;
-        _pbl = pbl;
-        document.documentElement.setAttribute("data-pg-popup-action", computePopupAction(getTopHost()));
+        document.documentElement.setAttribute("data-pg-pal", JSON.stringify(pal));
+        document.documentElement.setAttribute("data-pg-pbl", JSON.stringify(pbl));
         document.documentElement.setAttribute("data-pg-nbl", JSON.stringify(nbl));
     } catch (_) { }
 };
@@ -95,9 +72,9 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     (document.body || document.documentElement).appendChild(container);
 
     const shadow = container.attachShadow({ mode: "open" });
-    let iconUrl = "";
-    try { iconUrl = chrome.runtime.getURL("app_icon_128.png"); } catch (_) { }
-    const isSourceBlocked = checkMatch(source, _pbl);
+    const iconUrl = chrome.runtime.getURL("app_icon_128.png");
+    const pbl = JSON.parse(document.documentElement.getAttribute('data-pg-pbl') || '[]');
+    const isSourceBlocked = checkMatch(source, pbl);
 
     const actionText = isSourceBlocked
         ? `<b>${source}</b> is a blocked site. You clicked an external link to:`
@@ -164,8 +141,9 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     const cbDest = shadow.getElementById("cb-dest");
     shadow.getElementById("dest-host-label").textContent = destHost;
     if (destHost && destHost !== source) {
+        const pal = JSON.parse(document.documentElement.getAttribute('data-pg-pal') || '[]');
         const nbl = JSON.parse(document.documentElement.getAttribute('data-pg-nbl') || '[]');
-        if (!checkMatch(destHost, _pal) && !checkMatch(destHost, nbl)) {
+        if (!checkMatch(destHost, pal) && !checkMatch(destHost, nbl)) {
             shadow.getElementById("cb-dest-row").style.display = "";
         }
     }
@@ -224,10 +202,19 @@ const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
     };
 };
 
+const updateAttr = (key, fn) => {
+    const list = JSON.parse(document.documentElement.getAttribute(key) || '[]');
+    const updated = fn(list);
+    if (updated) document.documentElement.setAttribute(key, JSON.stringify(updated));
+};
+
 const saveSource = (source, action) => {
     if (action === 'allow') {
-        if (!_pal.includes(source)) _pal.push(source);
-        _pbl = _pbl.filter(x => x !== source);
+        updateAttr('data-pg-pal', list => {
+            if (list.includes(source)) return null;
+            list.push(source); return list;
+        });
+        updateAttr('data-pg-pbl', list => list.filter(x => x !== source));
         try {
             chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
                 try {
@@ -239,8 +226,11 @@ const saveSource = (source, action) => {
             });
         } catch (_) { }
     } else {
-        if (!_pbl.includes(source)) _pbl.push(source);
-        _pal = _pal.filter(x => x !== source);
+        updateAttr('data-pg-pbl', list => {
+            if (list.includes(source)) return null;
+            list.push(source); return list;
+        });
+        updateAttr('data-pg-pal', list => list.filter(x => x !== source));
         try {
             chrome.storage.sync.get(["popupAllow", "popupBlock"], data => {
                 try {
@@ -252,22 +242,20 @@ const saveSource = (source, action) => {
             });
         } catch (_) { }
     }
-    document.documentElement.setAttribute("data-pg-popup-action", computePopupAction(getTopHost()));
 };
 
 const saveDestBlock = (host) => {
-    const nbl = JSON.parse(document.documentElement.getAttribute('data-pg-nbl') || '[]');
-    if (!nbl.includes(host)) {
-        nbl.push(host);
-        document.documentElement.setAttribute('data-pg-nbl', JSON.stringify(nbl));
-    }
+    updateAttr('data-pg-nbl', list => {
+        if (list.includes(host)) return null;
+        list.push(host); return list;
+    });
     try {
         chrome.storage.sync.get(['navBlock'], data => {
             try {
-                const stored = data.navBlock || [];
-                if (!stored.includes(host)) {
-                    stored.push(host);
-                    chrome.storage.sync.set({ navBlock: stored });
+                const nbl = data.navBlock || [];
+                if (!nbl.includes(host)) {
+                    nbl.push(host);
+                    chrome.storage.sync.set({ navBlock: nbl });
                 }
             } catch (_) { }
         });
