@@ -10,8 +10,6 @@
 
 - Truy cập [PopupGuard](https://chromewebstore.google.com/detail/popupguard/ebpnmjkhlljiilkobejkdbhjjmjmjiaf), cài đặt như 1 plugin thông thường
 
----
-
 ## Tính năng Cốt lõi
 
 Khi một trang web cố mở lén lút tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại cảnh báo sẽ hiện ra ngay trong tab hiện tại.
@@ -38,8 +36,6 @@ Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý 
 - **Default:** Danh sách trắng các trang uy tín (Google, Facebook...), luôn được phép và không thể chặn.
 - **Thêm thủ công:** Hỗ trợ tên miền (`example.com`) hoặc wildcard (`*.example.com`). Ở tab **All**, cho phép thêm rule bằng tùy chọn. Các tab khác, domain thêm vào sẽ mặc định ở tab đó.
 - **Tìm kiếm & Xóa:** Lọc và xóa nhanh các quy tắc.
-
----
 
 ## Trải nghiệm sử dụng
 
