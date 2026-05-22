@@ -670,32 +670,28 @@
     //    We hook appendChild/insertBefore so that when a new <a> is added to
     //    the DOM, we immediately attach our capture-phase listener to it,
     //    ensuring we run BEFORE the ad script's synthetic dispatchEvent.
-    const hookDomInsertion = (proto) => {
-        const origAppendChild = proto.appendChild;
-        const origInsertBefore = proto.insertBefore;
-
-        proto.appendChild = function (child) {
-            const result = origAppendChild.call(this, child);
-            try {
-                if (isSiteHasAds() && child && child.nodeType === 1 && child.tagName === 'A') {
-                    child.addEventListener('click', handleLinkEvent, true);
-                }
-            } catch (_) { }
-            return result;
-        };
-
-        proto.insertBefore = function (child, ref) {
-            const result = origInsertBefore.call(this, child, ref);
-            try {
-                if (isSiteHasAds() && child && child.nodeType === 1 && child.tagName === 'A') {
-                    child.addEventListener('click', handleLinkEvent, true);
-                }
-            } catch (_) { }
-            return result;
-        };
-    };
-
-    hookDomInsertion(Node.prototype);
+    // ── Watch for dynamically added <a> elements using MutationObserver instead
+    //    of monkey-patching Node.prototype.appendChild / insertBefore.
+    //    Monkey-patching those methods breaks CSP nonce propagation on strict
+    //    pages (e.g. GitHub), because the browser loses the originating-script
+    //    context when the call passes through the extension wrapper, causing
+    //    legitimate nonce'd <script> insertions to be flagged as CSP violations.
+    //    MutationObserver achieves the same goal without touching native methods.
+    const domObserver = new MutationObserver(mutations => {
+        if (!isSiteHasAds()) return;
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                try {
+                    if (node.nodeType === 1 && node.tagName === 'A') {
+                        node.addEventListener('click', handleLinkEvent, true);
+                    }
+                } catch (_) { }
+            }
+        }
+    });
+    try {
+        domObserver.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (_) { }
 
     // ── Protect MouseEvent constructor: ad scripts set preventDefault = undefined
     //    on the event object. We make preventDefault non-configurable/non-writable
