@@ -191,6 +191,69 @@ function addDomain(input, targetKey) {
 
 
 
+function exportRules() {
+    chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], data => {
+        const payload = {
+            version: chrome.runtime.getManifest().version,
+            exported: new Date().toISOString(),
+            popupBlock: data.popupBlock || [],
+            popupAllow: data.popupAllow || [],
+            navBlock:   data.navBlock   || []
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        const date = new Date().toISOString().slice(0, 10);
+        a.href     = url;
+        a.download = 'popupguard-rules-' + date + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Rules exported');
+    });
+}
+
+function importRules(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+        let data;
+        try { data = JSON.parse(e.target.result); }
+        catch { showToast('Invalid JSON file'); return; }
+
+        const pbl = Array.isArray(data.popupBlock) ? data.popupBlock : [];
+        const pal = Array.isArray(data.popupAllow) ? data.popupAllow : [];
+        const nbl = Array.isArray(data.navBlock)   ? data.navBlock   : [];
+
+        if (!pbl.length && !pal.length && !nbl.length) {
+            showToast('No rules found in file');
+            return;
+        }
+
+        // Merge: union with existing, de-duplicate across lists
+        chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], existing => {
+            // Build merged sets per list
+            const merged = {
+                popupBlock: [...new Set([...(existing.popupBlock || []), ...pbl])],
+                popupAllow: [...new Set([...(existing.popupAllow || []), ...pal])],
+                navBlock:   [...new Set([...(existing.navBlock   || []), ...nbl])]
+            };
+            // Remove cross-list dupes: later list wins (navBlock > popupAllow > popupBlock)
+            const navSet = new Set(merged.navBlock);
+            merged.popupBlock = merged.popupBlock.filter(x => !navSet.has(x));
+            merged.popupAllow = merged.popupAllow.filter(x => !navSet.has(x));
+            const palSet = new Set(merged.popupAllow);
+            merged.popupBlock = merged.popupBlock.filter(x => !palSet.has(x));
+
+            chrome.storage.sync.set(merged, () => {
+                const total = pbl.length + pal.length + nbl.length;
+                showToast('Imported ' + total + ' rule' + (total !== 1 ? 's' : ''));
+                renderAll();
+            });
+        });
+    };
+    reader.readAsText(file);
+}
+
+
 var currentHost = null;
 
 function makeActionBtn(label, onClick) {
@@ -275,6 +338,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initStatusCard();
     renderAll();
+
+    document.getElementById('export-btn').addEventListener('click', exportRules);
+
+    document.getElementById('import-btn').addEventListener('click', () => {
+        document.getElementById('import-file-input').value = '';
+        document.getElementById('import-file-input').click();
+    });
+
+    document.getElementById('import-file-input').addEventListener('change', e => {
+        if (e.target.files[0]) importRules(e.target.files[0]);
+    });
 
 
     document.querySelectorAll('.tab').forEach(tab => {
