@@ -6,6 +6,12 @@
 
 ---
 
+## Hướng dẫn Cài đặt
+
+- Truy cập [PopupGuard](https://chromewebstore.google.com/detail/popupguard/ebpnmjkhlljiilkobejkdbhjjmjmjiaf), cài đặt như 1 plugin thông thường
+
+---
+
 ## Tính năng Cốt lõi
 
 Khi một trang web cố mở lén lút tab mới, cửa sổ mới, hoặc điều hướng sang trang khác, một hộp thoại cảnh báo sẽ hiện ra ngay trong tab hiện tại.
@@ -22,8 +28,6 @@ Lựa chọn của bạn sẽ được lưu lại (bạn có thể thay đổi h
 
 *(Lưu ý: Các tên miền đi tới danh sách trắng như shopee.vn, tiktok.com, v.v. sẽ tự động được bỏ qua).*
 
----
-
 ## Bảng điều khiển (Popup tiện ích)
 
 Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý thủ công:
@@ -37,15 +41,11 @@ Nhấn vào biểu tượng tiện ích trên thanh công cụ để quản lý 
 
 ---
 
-## Hướng dẫn Cài đặt
-
-- Truy cập [PopupGuard](https://chromewebstore.google.com/detail/popupguard/ebpnmjkhlljiilkobejkdbhjjmjmjiaf), cài đặt như 1 plugin thông thường
-
----
-
 ## Trải nghiệm sử dụng
 
 Sau khi cài đặt, bạn hiếm khi cần mở bảng điều khiển. Các hộp thoại cảnh báo sẽ xuất hiện trực tiếp ngay trên trang web để bạn xử lý nhanh (Cho phép/Chặn) mà không làm gián đoạn việc lướt web.
+
+PopupGuard không thiết kế để chặn quảng cáo, hay chặn khi người dùng tự click vào banner quảng cáo, tác dụng của nó là chặn các popup/redirect bị gọi lén
 
 ---
 
