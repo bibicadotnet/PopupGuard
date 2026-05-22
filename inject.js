@@ -338,6 +338,7 @@
     };
 
     const handleLinkEvent = (e) => {
+        if (isReplayingClick) return;
         if (popupPending) {
             if (e.isTrusted && e.type === 'click') {
                 const a = e.composedPath().find(el => el.tagName === 'A');
@@ -401,6 +402,7 @@
     };
 
     const handleFormSubmitEvent = (e) => {
+        if (isReplayingClick) return;
         if (e.defaultPrevented) return;
         const form = e.target;
         if (!form || form.tagName !== 'FORM' || !form.action) return;
@@ -450,6 +452,7 @@
                     target = e.composedPath().find(el => el.tagName === 'A') || this;
                 }
                 if (target.tagName === 'A' && target.href && !e.isTrusted) {
+                    if (isReplayingClick) return origDispatch.apply(this, args);
                     if (target.hasAttribute('download')) return origDispatch.apply(this, args);
 
                     if (getNavAction(target.href) === 'BLOCK') {
@@ -495,6 +498,7 @@
 
         proto.click = function () {
             if (this.tagName === 'A' && this.href) {
+                if (isReplayingClick) return origClick.call(this);
                 if (this.hasAttribute('download')) return origClick.call(this);
                 if (getNavAction(this.href) === 'BLOCK') {
                     this.removeAttribute('href');
@@ -522,6 +526,7 @@
 
     const originalSubmit = HTMLFormElement.prototype.submit;
     HTMLFormElement.prototype.submit = function () {
+        if (isReplayingClick) return originalSubmit.call(this);
         if (this.action) {
             if (getNavAction(this.action) === 'BLOCK') return;
             const action = checkCrossOriginPopup(this.action);
@@ -535,6 +540,7 @@
     if (HTMLFormElement.prototype.requestSubmit) {
         const orig = HTMLFormElement.prototype.requestSubmit;
         HTMLFormElement.prototype.requestSubmit = function (s) {
+            if (isReplayingClick) return orig.call(this, s);
             if (this.action) {
                 if (getNavAction(this.action) === 'BLOCK') return;
                 const action = checkCrossOriginPopup(this.action);
