@@ -20,7 +20,7 @@ const loadLists = async () => {
     if (!_cachedStaticList) {
         const fetched = await fetch(chrome.runtime.getURL("allowlist.json"))
             .then(r => r.json()).catch(() => null);
-        if (fetched) _cachedStaticList = fetched; // chỉ cache khi thành công
+        if (fetched) _cachedStaticList = fetched;
     }
     const data = await chrome.storage.sync.get(["popupAllow", "popupBlock", "navBlock"]);
     return {
@@ -299,3 +299,92 @@ window.addEventListener("message", e => {
         } catch (_) { }
     }
 });
+
+
+
+const isAdSite = () =>
+    document.documentElement.getAttribute('data-pg-ads') === '1';
+
+const looksLikeOverlay = (el) => {
+    try {
+        if (!el || el.nodeType !== 1) return false;
+        const tag = el.tagName;
+        if (tag === 'BODY' || tag === 'HTML' || tag === 'SCRIPT' ||
+            tag === 'STYLE' || tag === 'NOSCRIPT') return false;
+        if (el.id === 'pg-container') return false;
+        if (el.closest && el.closest('#pg-container')) return false;
+
+        const s = window.getComputedStyle(el);
+        if (s.display === 'none' || s.opacity === '0') return false;
+        if (s.position !== 'fixed' && s.position !== 'absolute') return false;
+
+        const z = parseInt(s.zIndex, 10);
+        if (isNaN(z) || z < 100) return false;
+
+        const vw = window.innerWidth || document.documentElement.clientWidth;
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        if (!vw || !vh) return false;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width < vw * 0.45 || rect.height < vh * 0.45) return false;
+        if (rect.bottom < 0 || rect.right < 0 || rect.top > vh || rect.left > vw) return false;
+
+        return true;
+    } catch (_) { return false; }
+};
+
+const scanAndRemove = () => {
+    if (!isAdSite()) return;
+    document.querySelectorAll('div, section, aside, span, ins, article')
+        .forEach(el => { if (looksLikeOverlay(el)) el.remove(); });
+};
+
+const unlockBodyScroll = () => {
+    if (!isAdSite()) return;
+    try {
+        const bs = window.getComputedStyle(document.body);
+        if (bs.overflow === 'hidden' || bs.overflowY === 'hidden') {
+            document.body.style.setProperty('overflow', 'auto', 'important');
+            document.body.style.setProperty('overflow-y', 'auto', 'important');
+        }
+    } catch (_) { }
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => scanAndRemove());
+} else {
+    scanAndRemove();
+}
+
+window.addEventListener('load', () => {
+    scanAndRemove();
+    unlockBodyScroll();
+    setTimeout(scanAndRemove, 500);
+    setTimeout(scanAndRemove, 1500);
+    setTimeout(scanAndRemove, 3000);
+});
+
+const overlayObserver = new MutationObserver(mutations => {
+    if (!isAdSite()) return;
+    for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            if (looksLikeOverlay(node)) { node.remove(); continue; }
+            if (node.querySelectorAll) {
+                node.querySelectorAll('div, section, aside')
+                    .forEach(child => { if (looksLikeOverlay(child)) child.remove(); });
+            }
+        }
+    }
+});
+
+const startOverlayObserver = () => {
+    const root = document.body || document.documentElement;
+    if (root) overlayObserver.observe(root, { childList: true, subtree: true });
+};
+
+if (document.body) {
+    startOverlayObserver();
+} else {
+    document.addEventListener('DOMContentLoaded', startOverlayObserver);
+}

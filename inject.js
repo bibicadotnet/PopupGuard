@@ -78,13 +78,11 @@
             isNav
         }, '*');
 
-        // Safety timeout: if content.js is orphaned (extension updated/reloaded),
-        // the dialog will never appear. Auto-unfreeze after 800ms so the page
-        // doesn't stay permanently locked on already-loaded tabs.
+
         clearTimeout(askSafetyTimer);
         askSafetyTimer = setTimeout(() => {
             if (!popupPending) return;
-            // Check if dialog actually appeared (content.js creates #pg-container)
+
             if (!document.getElementById('pg-container')) {
                 popupPending = false;
                 unfreezePage();
@@ -203,7 +201,7 @@
 
         if (getNavAction(url) === 'BLOCK') return;
 
-        // Only intercept cross-origin navigations if the site has ads
+
         if (!isSiteHasAds()) { doNavigate(url); return; }
 
         const action = getPopupAction();
@@ -291,8 +289,7 @@
 
     const stopEvent = (e) => {
         try {
-            // Ad scripts may nullify preventDefault (set to undefined) before dispatching.
-            // Always use the prototype method to ensure it works.
+
             if (typeof e.preventDefault === 'function') {
                 e.preventDefault();
             } else {
@@ -338,7 +335,6 @@
     };
 
     const handleLinkEvent = (e) => {
-        if (isReplayingClick) return;
         if (popupPending) {
             if (e.isTrusted && e.type === 'click') {
                 const a = e.composedPath().find(el => el.tagName === 'A');
@@ -356,9 +352,7 @@
 
         if (!e.isTrusted) {
             if ((e.metaKey || e.ctrlKey) && e.type === 'click') {
-                // Ad scripts (popMagic chromeTab) create temp <a>, dispatch fake
-                // click with ctrlKey+metaKey to force open in new tab.
-                // They also set event.preventDefault = undefined to bypass blocks.
+
                 stopEvent(e);
                 const a = e.composedPath().find(el => el.tagName === 'A');
                 if (a && a.href) a.removeAttribute('href');
@@ -392,8 +386,7 @@
             return;
         }
 
-        // Only intercept trusted clicks on new-tab links if the site has ads.
-        // On clean sites, let all user clicks through normally.
+
         if (!isSiteHasAds()) return;
 
         let action = checkCrossOriginPopup(a.href);
@@ -402,7 +395,6 @@
     };
 
     const handleFormSubmitEvent = (e) => {
-        if (isReplayingClick) return;
         if (e.defaultPrevented) return;
         const form = e.target;
         if (!form || form.tagName !== 'FORM' || !form.action) return;
@@ -452,7 +444,6 @@
                     target = e.composedPath().find(el => el.tagName === 'A') || this;
                 }
                 if (target.tagName === 'A' && target.href && !e.isTrusted) {
-                    if (isReplayingClick) return origDispatch.apply(this, args);
                     if (target.hasAttribute('download')) return origDispatch.apply(this, args);
 
                     if (getNavAction(target.href) === 'BLOCK') {
@@ -498,7 +489,6 @@
 
         proto.click = function () {
             if (this.tagName === 'A' && this.href) {
-                if (isReplayingClick) return origClick.call(this);
                 if (this.hasAttribute('download')) return origClick.call(this);
                 if (getNavAction(this.href) === 'BLOCK') {
                     this.removeAttribute('href');
@@ -526,7 +516,6 @@
 
     const originalSubmit = HTMLFormElement.prototype.submit;
     HTMLFormElement.prototype.submit = function () {
-        if (isReplayingClick) return originalSubmit.call(this);
         if (this.action) {
             if (getNavAction(this.action) === 'BLOCK') return;
             const action = checkCrossOriginPopup(this.action);
@@ -540,7 +529,6 @@
     if (HTMLFormElement.prototype.requestSubmit) {
         const orig = HTMLFormElement.prototype.requestSubmit;
         HTMLFormElement.prototype.requestSubmit = function (s) {
-            if (isReplayingClick) return orig.call(this, s);
             if (this.action) {
                 if (getNavAction(this.action) === 'BLOCK') return;
                 const action = checkCrossOriginPopup(this.action);
@@ -671,18 +659,7 @@
         try { protectWindow(el.contentWindow); } catch (_) { }
     };
 
-    // ── Intercept ad scripts that dynamically create <a> elements and
-    //    dispatch fake clicks with ctrlKey/metaKey (popMagic chromeTab technique).
-    //    We hook appendChild/insertBefore so that when a new <a> is added to
-    //    the DOM, we immediately attach our capture-phase listener to it,
-    //    ensuring we run BEFORE the ad script's synthetic dispatchEvent.
-    // ── Watch for dynamically added <a> elements using MutationObserver instead
-    //    of monkey-patching Node.prototype.appendChild / insertBefore.
-    //    Monkey-patching those methods breaks CSP nonce propagation on strict
-    //    pages (e.g. GitHub), because the browser loses the originating-script
-    //    context when the call passes through the extension wrapper, causing
-    //    legitimate nonce'd <script> insertions to be flagged as CSP violations.
-    //    MutationObserver achieves the same goal without touching native methods.
+
     const domObserver = new MutationObserver(mutations => {
         if (!isSiteHasAds()) return;
         for (const mutation of mutations) {
@@ -699,15 +676,11 @@
         domObserver.observe(document.documentElement, { childList: true, subtree: true });
     } catch (_) { }
 
-    // ── Protect MouseEvent constructor: ad scripts set preventDefault = undefined
-    //    on the event object. We make preventDefault non-configurable/non-writable
-    //    by wrapping the constructor. However, they assign directly on the instance
-    //    AFTER construction, so we use Object.defineProperty on the instance.
+
     const OrigMouseEvent = window.MouseEvent;
     window.MouseEvent = function (type, init) {
         const evt = new OrigMouseEvent(type, init);
-        // If the event has ctrlKey or metaKey and is synthetic (likely ad trick),
-        // protect preventDefault from being overwritten
+
         if (init && (init.ctrlKey || init.metaKey)) {
             try {
                 Object.defineProperty(evt, 'preventDefault', {
@@ -725,11 +698,7 @@
     new MutationObserver(mutations => {
         if (document.documentElement && currentDocEl !== document.documentElement) {
             currentDocEl = document.documentElement;
-            // Re-attach all listeners (matches attachDocListeners) when
-            // document.write replaces documentElement. submit is included here
-            // because we no longer hook Document.prototype.write for the main
-            // document (doing so caused false "parser-blocking cross-site script"
-            // warnings in Chrome attributed to inject.js instead of ad scripts).
+
             attachDocListeners(document);
         }
         for (const m of mutations) {
@@ -743,17 +712,6 @@
         }
     }).observe(document, { childList: true, subtree: true });
 
-    // ── Main-document reset detection: no document.write hook needed here.
-    //    Hooking Document.prototype.write at the main-document level causes:
-    //    1. Chrome attributes every document.write call (including ad-site calls)
-    //       to inject.js in the stack trace, producing misleading "cross-site
-    //       parser-blocking script via document.write" warnings that blame the
-    //       extension instead of the ad script.
-    //    2. The wrapper prevents Chrome from correctly tracking the originating
-    //       script for its own intervention mechanism, breaking its protection.
-    //    The MutationObserver below replaces this path. submit is added so the
-    //    observer fully covers what the former checkDocReset(document) path did.
-    //    Per-iframe hooks inside protectIframe() are kept because they run in
-    //    the iframe's own window scope and do not affect main-page attribution.
+
 
 })();

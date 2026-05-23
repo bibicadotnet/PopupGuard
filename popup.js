@@ -228,15 +228,15 @@ function importRules(file) {
             return;
         }
 
-        // Merge: union with existing, de-duplicate across lists
+
         chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], existing => {
-            // Build merged sets per list
+
             const merged = {
                 popupBlock: [...new Set([...(existing.popupBlock || []), ...pbl])],
                 popupAllow: [...new Set([...(existing.popupAllow || []), ...pal])],
                 navBlock:   [...new Set([...(existing.navBlock   || []), ...nbl])]
             };
-            // Remove cross-list dupes: later list wins (navBlock > popupAllow > popupBlock)
+
             const navSet = new Set(merged.navBlock);
             merged.popupBlock = merged.popupBlock.filter(x => !navSet.has(x));
             merged.popupAllow = merged.popupAllow.filter(x => !navSet.has(x));
@@ -246,7 +246,10 @@ function importRules(file) {
             chrome.storage.sync.set(merged, () => {
                 const total = pbl.length + pal.length + nbl.length;
                 showToast('Imported ' + total + ' rule' + (total !== 1 ? 's' : ''));
-                renderAll();
+
+                chrome.storage.sync.get(['popupBlock', 'popupAllow', 'navBlock'], () => {
+                    renderAll();
+                });
             });
         });
     };
