@@ -12,6 +12,20 @@
         return document.documentElement.getAttribute('data-pg-popup-action') || 'ASK';
     };
 
+    const getTopOrigin = () => {
+        if (window === window.top) {
+            try { return location.origin; } catch (_) { }
+        } else {
+            try { return window.top.location.origin; } catch (_) {
+                if (location.ancestorOrigins?.length > 0) {
+                    const topOrigin = location.ancestorOrigins[location.ancestorOrigins.length - 1];
+                    if (topOrigin) return topOrigin;
+                }
+            }
+        }
+        return '';
+    };
+
     const getNavAction = (url) => {
         try {
             const dest = new URL(url, location.href);
@@ -74,7 +88,7 @@
             url: resolved,
             name,
             specs,
-            source: location.hostname,
+            source: location.hostname.toLowerCase(),
             isNav
         }, '*');
 
@@ -327,9 +341,11 @@
     };
 
     const checkCrossOriginPopup = (url) => {
+        const topOrigin = getTopOrigin();
+        if (!topOrigin) return null;
         try {
             const dest = new URL(url, location.href);
-            if (dest.origin === location.origin) return null;
+            if (dest.origin === topOrigin) return null;
         } catch (_) { return null; }
         return getPopupAction();
     };
@@ -340,7 +356,8 @@
                 const a = e.composedPath().find(el => el.tagName === 'A');
                 if (a?.href && isNewTabTarget(getEffectiveTarget(a))) {
                     try {
-                        if (new URL(a.href, location.href).origin !== location.origin)
+                        const topOrigin = getTopOrigin();
+                        if (topOrigin && new URL(a.href, location.href).origin !== topOrigin)
                             e.preventDefault();
                     } catch (_) { }
                 }

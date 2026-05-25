@@ -61,15 +61,15 @@ const syncData = async () => {
 };
 
 const syncAdFlag = async () => {
-    if (window !== window.top) return;
-    let host;
-    try { host = location.hostname.toLowerCase(); } catch (_) { return; }
+    const host = getTopHost();
     if (!host) return;
     try {
         const data = await chrome.storage.local.get('adSites');
         const adSites = data.adSites || [];
         if (adSites.includes(host)) {
             document.documentElement.setAttribute('data-pg-ads', '1');
+        } else {
+            document.documentElement.removeAttribute('data-pg-ads');
         }
     } catch (_) { }
 };
@@ -285,7 +285,7 @@ window.addEventListener("message", e => {
     }
     if (e.data?.action === 'PG_SITE_HAS_ADS') {
         if (e.source !== window) return;
-        const host = location.hostname.toLowerCase();
+        const host = getTopHost();
         if (!host) return;
         try {
             chrome.storage.local.get('adSites', data => {
@@ -335,12 +335,14 @@ const looksLikeOverlay = (el) => {
 };
 
 const scanAndRemove = () => {
+    if (window !== window.top) return;
     if (!isAdSite()) return;
     document.querySelectorAll('div, section, aside, span, ins, article')
         .forEach(el => { if (looksLikeOverlay(el)) el.remove(); });
 };
 
 const unlockBodyScroll = () => {
+    if (window !== window.top) return;
     if (!isAdSite()) return;
     try {
         const bs = window.getComputedStyle(document.body);
@@ -380,6 +382,7 @@ const overlayObserver = new MutationObserver(mutations => {
 });
 
 const startOverlayObserver = () => {
+    if (window !== window.top) return;
     const root = document.body || document.documentElement;
     if (root) overlayObserver.observe(root, { childList: true, subtree: true });
 };
