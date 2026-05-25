@@ -278,7 +278,8 @@ window.addEventListener("message", e => {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.action === 'PG_ASK' && e.source !== window) return;
     if (e.data?.action === 'PG_ASK' || e.data?.action === 'PG_IFRAME') {
-        const source = e.data.source || getHost(e.data.url);
+        const topHost = getTopHost();
+        const source = (topHost && topHost !== 'unknown') ? topHost : (e.data.source || getHost(e.data.url));
         if (source === 'unknown') return;
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);
     }
