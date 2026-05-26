@@ -45,6 +45,7 @@
     let lastMousedownPos = null;
     let isReplayingClick = false;
     let popupBlockedDuringClick = false;
+    let isTrustedClickOnLink = false;
     const origPlay = HTMLMediaElement.prototype.play;
 
     const markSiteHasAds = () => {
@@ -58,6 +59,9 @@
         if (e.isTrusted && !isReplayingClick) {
             lastMousedownPos = { x: e.clientX, y: e.clientY };
             popupBlockedDuringClick = false;
+            const a = e.composedPath ? e.composedPath().find(el => el.tagName === 'A') : e.target?.closest?.('a');
+            isTrustedClickOnLink = !!(a && a.href);
+            setTimeout(() => { isTrustedClickOnLink = false; }, 100);
         }
     }, true);
 
@@ -172,7 +176,16 @@
             try { if (window.frames[name]) return originalOpen.call(window, url, name, specs); } catch (_) { }
         }
         const targetUrl = url || 'about:blank';
+        if (targetUrl !== 'about:blank') {
+            try {
+                const dest = new URL(targetUrl, location.href);
+                if (dest.origin === getTopOrigin()) return originalOpen.call(window, url, name, specs);
+            } catch (_) { }
+        }
         const action = getPopupAction();
+        if (isTrustedClickOnLink && action === 'ASK') {
+            return originalOpen.call(window, url, name, specs);
+        }
         if (action === 'BLOCK') {
             markSiteHasAds();
             popupBlockedDuringClick = true;
@@ -215,8 +228,9 @@
 
         if (getNavAction(url) === 'BLOCK') return;
 
-
         if (!isSiteHasAds()) { doNavigate(url); return; }
+
+        if (isTrustedClickOnLink) { doNavigate(url); return; }
 
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
@@ -279,6 +293,7 @@
                 }
             } catch (_) { return; }
             const action = getPopupAction();
+            if (e.userInitiated) return;
             if (action === 'BLOCK') { e.preventDefault(); return; }
             if (action === 'ASK') { e.preventDefault(); askPopup(e.destination.url, '_self', '', true); }
         });
@@ -595,7 +610,16 @@
                         try { if (w.top.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
                     }
                     const targetUrl = url || 'about:blank';
+                    if (targetUrl !== 'about:blank') {
+                        try {
+                            const dest = new URL(targetUrl, location.href);
+                            if (dest.origin === getTopOrigin()) return wOpen.call(w, url, name, specs);
+                        } catch (_) { }
+                    }
                     const action = getPopupAction();
+                    if (isTrustedClickOnLink && action === 'ASK') {
+                        return wOpen.call(w, url, name, specs);
+                    }
                     if (action === 'BLOCK') {
                         markSiteHasAds();
                         popupBlockedDuringClick = true;
