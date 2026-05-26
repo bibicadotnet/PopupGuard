@@ -408,7 +408,11 @@
 
         let action = checkCrossOriginPopup(a.href);
 
-        if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_blank', ''); }
+        if (action === 'ASK') {
+            if (e.isTrusted && !popupBlockedDuringClick) return;
+            stopEvent(e);
+            askPopup(a.href, a.target || '_blank', '');
+        }
     };
 
     const handleFormSubmitEvent = (e) => {
@@ -432,6 +436,7 @@
             if (!isSiteHasAds()) return;
             let action = checkCrossOriginPopup(form.action);
             if (action === 'ASK') {
+                if (e.isTrusted && !popupBlockedDuringClick) return;
                 stopEvent(e);
                 askPopup(form.action, form.target || '_blank', '');
             }
