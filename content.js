@@ -234,7 +234,13 @@ const saveSource = (source, action) => {
                     const pal = data.popupAllow || [];
                     const pbl = (data.popupBlock || []).filter(x => x !== source);
                     if (!pal.includes(source)) pal.push(source);
-                    chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl });
+                    chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl }, () => {
+                        // Remove from adSites
+                        chrome.storage.local.get(['adSites'], localData => {
+                            const adSites = (localData.adSites || []).filter(x => x !== source);
+                            chrome.storage.local.set({ adSites });
+                        });
+                    });
                 } catch (_) { }
             });
         } catch (_) { }
@@ -318,6 +324,7 @@ const looksLikeOverlay = (el) => {
         const s = window.getComputedStyle(el);
         if (s.display === 'none' || s.opacity === '0') return false;
         if (s.position !== 'fixed' && s.position !== 'absolute') return false;
+        if (s.pointerEvents === 'none') return false;
 
         const z = parseInt(s.zIndex, 10);
         if (isNaN(z) || z < 100) return false;
@@ -329,6 +336,10 @@ const looksLikeOverlay = (el) => {
         const rect = el.getBoundingClientRect();
         if (rect.width < vw * 0.45 || rect.height < vh * 0.45) return false;
         if (rect.bottom < 0 || rect.right < 0 || rect.top > vh || rect.left > vw) return false;
+
+        // Logical check: Legitimate interactive components (like uploaders, forms, or media overlays)
+        // contain form controls, textareas, selects, canvases, or media tags.
+        if (el.querySelector('input, button, textarea, select, canvas, video, audio')) return false;
 
         return true;
     } catch (_) { return false; }

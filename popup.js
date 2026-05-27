@@ -155,7 +155,12 @@ function renderAll() {
 function removeDomain(domain, storageKey) {
     chrome.storage.sync.get([storageKey], data => {
         const list = (data[storageKey] || []).filter(x => x !== domain);
-        chrome.storage.sync.set({ [storageKey]: list }, renderAll);
+        chrome.storage.sync.set({ [storageKey]: list }, () => {
+            chrome.storage.local.get(['adSites'], localData => {
+                const adSites = (localData.adSites || []).filter(x => x !== domain);
+                chrome.storage.local.set({ adSites }, renderAll);
+            });
+        });
     });
 }
 
@@ -183,7 +188,14 @@ function addDomain(input, targetKey) {
             });
             chrome.storage.sync.set(update, () => {
                 document.getElementById('new-domain').value = '';
-                renderAll();
+                if (targetKey === 'popupAllow') {
+                    chrome.storage.local.get(['adSites'], localData => {
+                        const adSites = (localData.adSites || []).filter(x => x !== host);
+                        chrome.storage.local.set({ adSites }, renderAll);
+                    });
+                } else {
+                    renderAll();
+                }
             });
         });
     });
@@ -281,7 +293,12 @@ function clearHostRules() {
             popupBlock: filterRule(data.popupBlock, currentHost),
             popupAllow: filterRule(data.popupAllow, currentHost),
             navBlock: filterRule(data.navBlock, currentHost)
-        }, renderAll);
+        }, () => {
+            chrome.storage.local.get(['adSites'], localData => {
+                const adSites = (localData.adSites || []).filter(x => x !== currentHost);
+                chrome.storage.local.set({ adSites }, renderAll);
+            });
+        });
     });
 }
 

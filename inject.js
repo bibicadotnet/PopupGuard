@@ -193,7 +193,6 @@
             return fakeWindow;
         }
         if (action === 'ASK') {
-            markSiteHasAds();
             popupBlockedDuringClick = true;
             askPopup(targetUrl, name, specs);
             return fakeWindow;
@@ -235,7 +234,6 @@
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
         if (action === 'BLOCK') { markSiteHasAds(); return; }
-        markSiteHasAds();
         askPopup(url, '_self', '', true);
     };
 
@@ -628,7 +626,6 @@
                         return fakeWindow;
                     }
                     if (action === 'ASK') {
-                        markSiteHasAds();
                         popupBlockedDuringClick = true;
                         askPopup(targetUrl, name, specs);
                         return fakeWindow;
