@@ -60,25 +60,9 @@ const syncData = async () => {
     } catch (_) { }
 };
 
-const syncAdFlag = async () => {
-    const host = getTopHost();
-    if (!host) return;
-    try {
-        const data = await chrome.storage.local.get('adSites');
-        const adSites = data.adSites || [];
-        if (adSites.includes(host)) {
-            document.documentElement.setAttribute('data-pg-ads', '1');
-        } else {
-            document.documentElement.removeAttribute('data-pg-ads');
-        }
-    } catch (_) { }
-};
-
 syncData();
-syncAdFlag();
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync') syncData();
-    if (area === 'local' && changes.adSites) syncAdFlag();
 });
 
 const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
@@ -234,13 +218,7 @@ const saveSource = (source, action) => {
                     const pal = data.popupAllow || [];
                     const pbl = (data.popupBlock || []).filter(x => x !== source);
                     if (!pal.includes(source)) pal.push(source);
-                    chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl }, () => {
-                        // Remove from adSites
-                        chrome.storage.local.get(['adSites'], localData => {
-                            const adSites = (localData.adSites || []).filter(x => x !== source);
-                            chrome.storage.local.set({ adSites });
-                        });
-                    });
+                    chrome.storage.sync.set({ popupAllow: pal, popupBlock: pbl });
                 } catch (_) { }
             });
         } catch (_) { }
@@ -289,28 +267,12 @@ window.addEventListener("message", e => {
         if (source === 'unknown') return;
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);
     }
-    if (e.data?.action === 'PG_SITE_HAS_ADS') {
-        if (e.source !== window) return;
-        const host = getTopHost();
-        if (!host) return;
-        try {
-            chrome.storage.local.get('adSites', data => {
-                try {
-                    const adSites = data.adSites || [];
-                    if (!adSites.includes(host)) {
-                        adSites.push(host);
-                        chrome.storage.local.set({ adSites });
-                    }
-                } catch (_) { }
-            });
-        } catch (_) { }
-    }
 });
 
 
 
 const isAdSite = () =>
-    document.documentElement.getAttribute('data-pg-ads') === '1';
+    document.documentElement.getAttribute('data-pg-popup-action') === 'BLOCK';
 
 const looksLikeOverlay = (el) => {
     try {

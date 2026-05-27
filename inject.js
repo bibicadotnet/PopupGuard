@@ -36,10 +36,8 @@
     };
 
     let popupPending = false;
-    let _siteHasAds = false;
-    const isSiteHasAds = () => _siteHasAds
-        || document.documentElement?.getAttribute('data-pg-ads') === '1'
-        || document.documentElement?.getAttribute('data-pg-popup-action') === 'BLOCK';
+    const isSiteHasAds = () =>
+        document.documentElement?.getAttribute('data-pg-popup-action') === 'BLOCK';
 
     let pendingNav = null;
     let lastMousedownPos = null;
@@ -47,13 +45,6 @@
     let popupBlockedDuringClick = false;
     let isTrustedClickOnLink = false;
     const origPlay = HTMLMediaElement.prototype.play;
-
-    const markSiteHasAds = () => {
-        if (_siteHasAds) return;
-        _siteHasAds = true;
-        document.documentElement?.setAttribute('data-pg-ads', '1');
-        window.postMessage({ action: 'PG_SITE_HAS_ADS' }, '*');
-    };
 
     document.addEventListener('mousedown', e => {
         if (e.isTrusted && !isReplayingClick) {
@@ -187,7 +178,6 @@
             return originalOpen.call(window, url, name, specs);
         }
         if (action === 'BLOCK') {
-            markSiteHasAds();
             popupBlockedDuringClick = true;
             if (!isReplayingClick) replayClickAfterBlock();
             return fakeWindow;
@@ -213,14 +203,20 @@
     let bypassNext = false;
 
     const interceptNav = (url, doNavigate) => {
+        if (popupPending) {
+            try {
+                const dest = new URL(url, location.href);
+                if (dest.origin === location.origin) {
+                    pendingNav = { fn: doNavigate, url };
+                }
+            } catch (_) { }
+            return;
+        }
+
         try {
             const dest = new URL(url, location.href);
             if (dest.origin === location.origin) {
-                if (!popupPending) {
-                    doNavigate(url);
-                } else {
-                    pendingNav = { fn: doNavigate, url };
-                }
+                doNavigate(url);
                 return;
             }
         } catch (e) { doNavigate(url); return; }
@@ -233,7 +229,7 @@
 
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
-        if (action === 'BLOCK') { markSiteHasAds(); return; }
+        if (action === 'BLOCK') { return; }
         askPopup(url, '_self', '', true);
     };
 
@@ -270,13 +266,13 @@
 
     if (window.navigation) {
         window.navigation.addEventListener('navigate', e => {
-            if (!isSiteHasAds()) return;
             if (e.hashChange || e.downloadRequest) return;
             if (bypassNext) { bypassNext = false; return; }
-            try {
-                const dest = new URL(e.destination.url);
-                if (dest.origin === location.origin) {
-                    if (popupPending) {
+
+            if (popupPending) {
+                try {
+                    const dest = new URL(e.destination.url);
+                    if (dest.origin === location.origin) {
                         e.preventDefault();
                         pendingNav = {
                             fn: u => {
@@ -286,9 +282,17 @@
                             },
                             url: e.destination.url
                         };
+                    } else {
+                        e.preventDefault();
                     }
-                    return;
-                }
+                } catch (_) { }
+                return;
+            }
+
+            if (!isSiteHasAds()) return;
+            try {
+                const dest = new URL(e.destination.url);
+                if (dest.origin === location.origin) return;
             } catch (_) { return; }
             const action = getPopupAction();
             if (e.userInitiated) return;
@@ -620,7 +624,6 @@
                         return wOpen.call(w, url, name, specs);
                     }
                     if (action === 'BLOCK') {
-                        markSiteHasAds();
                         popupBlockedDuringClick = true;
                         if (!isReplayingClick) replayClickAfterBlock();
                         return fakeWindow;
