@@ -12,6 +12,27 @@
         return document.documentElement?.getAttribute('data-pg-popup-action') || 'ASK';
     };
 
+    // True once content.js has written data-pg-popup-action at least once.
+    const isReady = () => document.documentElement.hasAttribute('data-pg-popup-action');
+
+    // Queue for window.open calls that arrive before content.js finishes initializing.
+    // Each entry: { resolve, url, name, specs }
+    const _pendingOpens = [];
+
+    // When data-pg-popup-action is first written, flush the queue.
+    const _readyObserver = new MutationObserver(() => {
+        if (!isReady()) return;
+        _readyObserver.disconnect();
+        // Process buffered calls now that we have the correct action.
+        for (const item of _pendingOpens.splice(0)) {
+            item.resolve(interceptedOpen(item.url, item.name, item.specs));
+        }
+    });
+    _readyObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-pg-popup-action']
+    });
+
     const getTopOrigin = () => {
         if (window === window.top) {
             try { return location.origin; } catch (_) { }
@@ -44,6 +65,8 @@
     let isReplayingClick = false;
     let popupBlockedDuringClick = false;
     let isTrustedClickOnLink = false;
+    let trustedLinkUrl = null;
+    let trustedClickSafetyTimer = null;
     const origPlay = HTMLMediaElement.prototype.play;
 
     document.addEventListener('mousedown', e => {
@@ -52,7 +75,12 @@
             popupBlockedDuringClick = false;
             const a = e.composedPath ? e.composedPath().find(el => el.tagName === 'A') : e.target?.closest?.('a');
             isTrustedClickOnLink = !!(a && a.href);
-            setTimeout(() => { isTrustedClickOnLink = false; }, 100);
+            trustedLinkUrl = null;
+            clearTimeout(trustedClickSafetyTimer);
+            if (isTrustedClickOnLink) {
+                try { trustedLinkUrl = new URL(a.href, location.href).href; } catch (_) { }
+                trustedClickSafetyTimer = setTimeout(() => { isTrustedClickOnLink = false; trustedLinkUrl = null; }, 1000);
+            }
         }
     }, true);
 
@@ -117,7 +145,13 @@
     let replayTimeoutId = null;
 
     document.addEventListener('click', e => {
-        if (e.isTrusted && !isReplayingClick) clearTimeout(replayTimeoutId);
+        if (e.isTrusted && !isReplayingClick) {
+            clearTimeout(replayTimeoutId);
+            if (isTrustedClickOnLink) {
+                clearTimeout(trustedClickSafetyTimer);
+                setTimeout(() => { isTrustedClickOnLink = false; trustedLinkUrl = null; }, 0);
+            }
+        }
     }, true);
 
     const replayClickAfterBlock = () => {
@@ -173,9 +207,37 @@
                 if (dest.origin === getTopOrigin()) return originalOpen.call(window, url, name, specs);
             } catch (_) { }
         }
+
+        // If content.js hasn't written data-pg-popup-action yet, we don't know
+        // the correct action for this site. Buffer the call and replay it once
+        // the attribute is set (via MutationObserver above). This avoids both:
+        //   - defaulting to ASK (wrongly blocks allowlisted sites like live.com)
+        //   - defaulting to ALLOW (wrongly lets ad-site popups through)
+        if (!isReady()) {
+            // Return a proxy window that replays the real decision asynchronously.
+            let _realWin = null;
+            const proxy = {
+                closed: false,
+                name: name || '',
+                close() { _realWin?.close(); },
+                focus() { _realWin?.focus(); },
+                blur() { _realWin?.blur(); },
+                postMessage(...a) { _realWin?.postMessage(...a); },
+                location: { href: 'about:blank', assign() {}, replace() {} },
+            };
+            _pendingOpens.push({
+                url: targetUrl, name, specs,
+                resolve(win) { _realWin = win; if (win && win !== fakeWindow) proxy.closed = false; }
+            });
+            return proxy;
+        }
+
         const action = getPopupAction();
-        if (isTrustedClickOnLink && action === 'ASK') {
-            return originalOpen.call(window, url, name, specs);
+        if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
+            try {
+                if (new URL(targetUrl, location.href).href === trustedLinkUrl)
+                    return originalOpen.call(window, url, name, specs);
+            } catch (_) { }
         }
         if (action === 'BLOCK') {
             popupBlockedDuringClick = true;
@@ -620,8 +682,11 @@
                         } catch (_) { }
                     }
                     const action = getPopupAction();
-                    if (isTrustedClickOnLink && action === 'ASK') {
-                        return wOpen.call(w, url, name, specs);
+                    if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
+                        try {
+                            if (new URL(targetUrl, location.href).href === trustedLinkUrl)
+                                return wOpen.call(w, url, name, specs);
+                        } catch (_) { }
                     }
                     if (action === 'BLOCK') {
                         popupBlockedDuringClick = true;
