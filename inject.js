@@ -598,6 +598,7 @@
 
     const protectWindow = (w) => {
         if (!w || protectedWindows.has(w)) return;
+        if (!w.document?.documentElement) return;
         try { w.Object; } catch (_) { return; }
         protectedWindows.add(w);
         try {
