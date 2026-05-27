@@ -9,7 +9,7 @@
     };
 
     const getPopupAction = () => {
-        return document.documentElement.getAttribute('data-pg-popup-action') || 'ASK';
+        return document.documentElement?.getAttribute('data-pg-popup-action') || 'ASK';
     };
 
     const getTopOrigin = () => {
@@ -29,7 +29,7 @@
     const getNavAction = (url) => {
         try {
             const dest = new URL(url, location.href);
-            const nbl = JSON.parse(document.documentElement.getAttribute('data-pg-nbl') || '[]');
+            const nbl = JSON.parse(document.documentElement?.getAttribute('data-pg-nbl') || '[]');
             if (checkMatch(dest.hostname.toLowerCase(), nbl)) return 'BLOCK';
         } catch (e) { }
         return 'ALLOW';
@@ -38,8 +38,8 @@
     let popupPending = false;
     let _siteHasAds = false;
     const isSiteHasAds = () => _siteHasAds
-        || document.documentElement.getAttribute('data-pg-ads') === '1'
-        || document.documentElement.getAttribute('data-pg-popup-action') === 'BLOCK';
+        || document.documentElement?.getAttribute('data-pg-ads') === '1'
+        || document.documentElement?.getAttribute('data-pg-popup-action') === 'BLOCK';
 
     let pendingNav = null;
     let lastMousedownPos = null;
@@ -51,7 +51,7 @@
     const markSiteHasAds = () => {
         if (_siteHasAds) return;
         _siteHasAds = true;
-        document.documentElement.setAttribute('data-pg-ads', '1');
+        document.documentElement?.setAttribute('data-pg-ads', '1');
         window.postMessage({ action: 'PG_SITE_HAS_ADS' }, '*');
     };
 
@@ -301,7 +301,7 @@
 
 
     const navToken = Math.random().toString(36).slice(2);
-    document.documentElement.setAttribute('data-pg-nav-token', navToken);
+    document.documentElement?.setAttribute('data-pg-nav-token', navToken);
     window.addEventListener('message', e => {
         if (e.source !== window) return;
         if (!e.data || typeof e.data !== 'object') return;
@@ -598,8 +598,8 @@
 
     const protectWindow = (w) => {
         if (!w || protectedWindows.has(w)) return;
-        if (!w.document?.documentElement) return;
         try { w.Object; } catch (_) { return; }
+        if (!w.document?.documentElement) return;
         protectedWindows.add(w);
         try {
             const wOpen = w.open;
@@ -652,23 +652,6 @@
                     }
                 }).observe(d, { childList: true });
             }
-
-            if (w.Document && w.Document.prototype && !w.Document.prototype.write._pgHooked) {
-                const wOrigWrite = w.Document.prototype.write;
-                const wOrigWriteln = w.Document.prototype.writeln;
-                w.Document.prototype.write = function (...args) {
-                    const r = wOrigWrite.apply(this, args);
-                    attachDocListeners(this);
-                    return r;
-                };
-                w.Document.prototype.write._pgHooked = true;
-                w.Document.prototype.writeln = function (...args) {
-                    const r = wOrigWriteln.apply(this, args);
-                    attachDocListeners(this);
-                    return r;
-                };
-                w.Document.prototype.writeln._pgHooked = true;
-            }
         } catch (_) { }
 
         try {
@@ -707,53 +690,21 @@
     };
 
 
-    const domObserver = new MutationObserver(mutations => {
-        if (!isSiteHasAds()) return;
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                try {
-                    if (node.nodeType === 1 && node.tagName === 'A') {
-                        node.addEventListener('click', handleLinkEvent, true);
-                    }
-                } catch (_) { }
-            }
-        }
-    });
-    try {
-        domObserver.observe(document.documentElement, { childList: true, subtree: true });
-    } catch (_) { }
-
-
-    const OrigMouseEvent = window.MouseEvent;
-    window.MouseEvent = function (type, init) {
-        const evt = new OrigMouseEvent(type, init);
-
-        if (init && (init.ctrlKey || init.metaKey)) {
-            try {
-                Object.defineProperty(evt, 'preventDefault', {
-                    value: Event.prototype.preventDefault,
-                    writable: false,
-                    configurable: false
-                });
-            } catch (_) { }
-        }
-        return evt;
-    };
-    window.MouseEvent.prototype = OrigMouseEvent.prototype;
-    Object.defineProperty(window.MouseEvent, 'name', { value: 'MouseEvent' });
-
     new MutationObserver(mutations => {
         if (document.documentElement && currentDocEl !== document.documentElement) {
             currentDocEl = document.documentElement;
-
             attachDocListeners(document);
         }
         for (const m of mutations) {
             for (const node of m.addedNodes) {
                 if (node.nodeType !== 1) continue;
-                protectIframe(node);
-                if (node.querySelectorAll) {
-                    node.querySelectorAll('iframe, frame').forEach(protectIframe);
+                if (node.tagName === 'IFRAME' || node.tagName === 'FRAME') {
+                    protectIframe(node);
+                } else if (node.getElementsByTagName) {
+                    const frames = node.getElementsByTagName('iframe');
+                    for (let i = 0; i < frames.length; i++) protectIframe(frames[i]);
+                    const frames2 = node.getElementsByTagName('frame');
+                    for (let i = 0; i < frames2.length; i++) protectIframe(frames2[i]);
                 }
             }
         }
