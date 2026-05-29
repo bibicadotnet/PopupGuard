@@ -16,9 +16,9 @@
     // True once content.js has written data-pg-popup-action at least once.
     const isReady = () => document.documentElement.hasAttribute('data-pg-popup-action');
 
-    // Queue for window.open calls that arrive before content.js finishes initializing.
     // Each entry: { resolve, url, name, specs }
     const _pendingOpens = [];
+    const _pendingActions = [];
 
     // When data-pg-popup-action is first written, flush the queue.
     const _readyObserver = new MutationObserver(() => {
@@ -28,11 +28,20 @@
         for (const item of _pendingOpens.splice(0)) {
             item.resolve(interceptedOpen(item.url, item.name, item.specs));
         }
+        for (const fn of _pendingActions.splice(0)) {
+            fn();
+        }
     });
     _readyObserver.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['data-pg-popup-action']
     });
+
+    const waitForReady = (fn) => {
+        if (isReady()) { fn(); return false; }
+        _pendingActions.push(fn);
+        return true;
+    };
 
     const getTopOrigin = () => {
         if (window === window.top) {
@@ -338,6 +347,8 @@
             try { if (new URL(url, location.href).href === trustedLinkUrlForNav) { doNavigate(url); return; } } catch (_) { }
         }
 
+        if (waitForReady(() => interceptNav(url, doNavigate))) return;
+
         const action = getPopupAction();
         if (action === 'ALLOW') { doNavigate(url); return; }
         if (action === 'BLOCK') { return; }
@@ -405,8 +416,18 @@
                 const dest = new URL(e.destination.url);
                 if (dest.origin === location.origin) return;
             } catch (_) { return; }
-            const action = getPopupAction();
             if (e.userInitiated) return;
+
+            if (waitForReady(() => {
+                bypassNext = true;
+                if (origAssign) origAssign.call(location, e.destination.url);
+                else location.href = e.destination.url;
+            })) {
+                e.preventDefault();
+                return;
+            }
+
+            const action = getPopupAction();
             if (action === 'BLOCK') { e.preventDefault(); return; }
             if (action === 'ASK') { e.preventDefault(); askPopup(e.destination.url, '_self', '', true); }
         });
@@ -506,6 +527,17 @@
             if (e.button !== 0 && e.type !== 'mousedown') { stopEvent(e); return; }
             const a = e.composedPath().find(el => el.tagName === 'A');
             if (a && a.href) {
+                if (!isReady()) {
+                    stopEvent(e);
+                    const type = e.type;
+                    _pendingActions.push(() => {
+                        if (a.isConnected) {
+                            if (type === 'click') a.click();
+                            else if (type === 'auxclick') a.dispatchEvent(new MouseEvent('auxclick', { button: 1, bubbles: true }));
+                        }
+                    });
+                    return;
+                }
                 if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
                 const action = checkCrossOriginPopup(a.href);
                 if (action === 'BLOCK') { stopEvent(e); return; }
@@ -564,6 +596,12 @@
                         return;
                     }
                 } catch (_) { }
+
+                if (waitForReady(() => {
+                    if (getPopupAction() === 'BLOCK') return;
+                    askPopup(trustedLinkUrl, a.target || '_blank', '', true);
+                })) return;
+
                 // Cross-origin rewrite → ask with the original URL, using isNav so ALLOW works.
                 if (getPopupAction() === 'BLOCK') return;
                 askPopup(trustedLinkUrl, a.target || '_blank', '', true);
@@ -593,6 +631,11 @@
         }
 
         if (!e.isTrusted) {
+            if (!isReady()) {
+                stopEvent(e);
+                _pendingActions.push(() => { if (form.isConnected) form.submit(); });
+                return;
+            }
             const action = checkCrossOriginPopup(form.action);
             if (action === 'BLOCK') { stopEvent(e); return; }
             if (action === 'ASK') { stopEvent(e); askPopup(form.action, form.target || '_self', '', true); return; }

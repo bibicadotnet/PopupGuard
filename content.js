@@ -3,6 +3,7 @@
 let _cachedStaticList = null;
 let _pal = [];
 let _pbl = [];
+let _syncPromise = null;
 
 const getHost = url => {
     try { return new URL(url.startsWith('http') ? url : 'http://' + url).hostname.toLowerCase(); }
@@ -73,9 +74,9 @@ const syncData = async () => {
     } catch (_) { }
 };
 
-syncData();
+_syncPromise = syncData();
 chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync') syncData();
+    if (area === 'sync') _syncPromise = syncData();
 });
 
 const showPopup = (url, source, name = "_blank", specs = "", isNav = false) => {
@@ -271,16 +272,26 @@ const saveDestBlock = (host) => {
     } catch (_) { }
 };
 
-window.addEventListener("message", e => {
+window.addEventListener("message", async e => {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.action === 'PG_ASK' && e.source !== window) return;
     if (e.data?.action === 'PG_ASK' || e.data?.action === 'PG_IFRAME') {
+        if (_syncPromise) await _syncPromise;
         const topHost = getTopHost();
         const source = (topHost && topHost !== 'unknown') ? topHost : (e.data.source || getHost(e.data.url));
         if (source === 'unknown') return;
         // Safety net: if the source is already in the allowlist (e.g. arrived here due to
         // a race before inject.js saw the correct data-pg-popup-action), skip the dialog.
-        if (checkMatch(source, _pal)) return;
+        if (checkMatch(source, _pal)) {
+            window.postMessage({ action: 'PG_DIALOG_CLOSED' }, '*');
+            if (e.data.isNav) {
+                const token = document.documentElement.getAttribute('data-pg-nav-token');
+                window.postMessage({ action: 'PG_DO_NAV', url: e.data.url, token }, '*');
+            } else {
+                window.open(e.data.url, e.data.name, e.data.specs);
+            }
+            return;
+        }
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);
     }
 });
