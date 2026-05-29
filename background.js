@@ -14,19 +14,8 @@ const syncNetworkRules = async () => {
     ];
 
     const addRules = navBlock.map((domain, i) => {
-        let condition;
-
-        if (domain.startsWith('*.')) {
-            const base = domain.slice(2);
-            condition = { urlFilter: `||${base}^`, resourceTypes };
-        } else {
-            const escaped = domain.replace(/\./g, '\\.');
-            condition = {
-                regexFilter: `^https?://${escaped}([/?:#]|$)`,
-                resourceTypes
-            };
-        }
-
+        const base = domain.startsWith('*.') ? domain.slice(2) : domain;
+        const condition = { urlFilter: `||${base}^`, resourceTypes };
         return { id: i + 1, priority: 1, action: { type: 'block' }, condition };
     });
 
