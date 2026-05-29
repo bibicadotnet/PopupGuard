@@ -52,9 +52,9 @@ const computePopupAction = (host) => {
 
 const syncData = async () => {
     try {
-
-
-
+        // Phase 1 – load static allowlist only (fast local file fetch).
+        // Set the attribute immediately so inject.js can make correct decisions
+        // even if the page fires window.open before storage.sync finishes.
         if (!_cachedStaticList) {
             const fetched = await fetch(chrome.runtime.getURL("allowlist.json"))
                 .then(r => r.json()).catch(() => null);
@@ -64,6 +64,7 @@ const syncData = async () => {
         _pbl = [];
         document.documentElement.setAttribute("data-pg-popup-action", computePopupAction(getTopHost()));
 
+        // Phase 2 – load user overrides from storage.sync (may be slower).
         const data = await chrome.storage.sync.get(["popupAllow", "popupBlock", "navBlock"]);
         _pal = [...new Set([..._pal, ...(data.popupAllow || [])])];
         _pbl = data.popupBlock || [];
@@ -277,8 +278,8 @@ window.addEventListener("message", e => {
         const topHost = getTopHost();
         const source = (topHost && topHost !== 'unknown') ? topHost : (e.data.source || getHost(e.data.url));
         if (source === 'unknown') return;
-
-
+        // Safety net: if the source is already in the allowlist (e.g. arrived here due to
+        // a race before inject.js saw the correct data-pg-popup-action), skip the dialog.
         if (checkMatch(source, _pal)) return;
         showPopup(e.data.url, source, e.data.name, e.data.specs, e.data.isNav || false);
     }
@@ -314,7 +315,8 @@ const looksLikeOverlay = (el) => {
         if (rect.width < vw * 0.45 || rect.height < vh * 0.45) return false;
         if (rect.bottom < 0 || rect.right < 0 || rect.top > vh || rect.left > vw) return false;
 
-
+        // Logical check: Legitimate interactive components (like uploaders, forms, or media overlays)
+        // contain form controls, textareas, selects, canvases, or media tags.
         if (el.querySelector('input, button, textarea, select, canvas, video, audio')) return false;
 
         return true;
