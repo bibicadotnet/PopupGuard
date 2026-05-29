@@ -13,18 +13,15 @@
         return document.documentElement?.getAttribute('data-pg-popup-action') || 'ASK';
     };
 
-    // True once content.js has written data-pg-popup-action at least once.
     const isReady = () => document.documentElement.hasAttribute('data-pg-popup-action');
 
-    // Queue for window.open calls that arrive before content.js finishes initializing.
-    // Each entry: { resolve, url, name, specs }
+
     const _pendingOpens = [];
 
-    // When data-pg-popup-action is first written, flush the queue.
     const _readyObserver = new MutationObserver(() => {
         if (!isReady()) return;
         _readyObserver.disconnect();
-        // Process buffered calls now that we have the correct action.
+
         for (const item of _pendingOpens.splice(0)) {
             item.resolve(interceptedOpen(item.url, item.name, item.specs));
         }
@@ -68,7 +65,7 @@
     let isTrustedClickOnLink = false;
     let trustedLinkUrl = null;
     let trustedClickSafetyTimer = null;
-    // Survives the setTimeout(0) clear in the click handler so interceptNav can still use it.
+
     let trustedLinkUrlForNav = null;
     const origPlay = HTMLMediaElement.prototype.play;
 
@@ -166,8 +163,8 @@
 
         clearTimeout(replayTimeoutId);
         replayTimeoutId = setTimeout(() => {
-            // Use trustedLinkUrl (recorded at mousedown) — a.href may have been
-            // rewritten by the ad script to the ad URL by the time we get here.
+
+
             if (trustedLinkUrl && origAssign) {
                 origAssign.call(location, trustedLinkUrl);
                 return;
@@ -213,42 +210,16 @@
             try { if (window.frames[name]) return originalOpen.call(window, url, name, specs); } catch (_) { }
         }
         const targetUrl = url || 'about:blank';
-        if (targetUrl !== 'about:blank') {
-            try {
-                const dest = new URL(targetUrl, location.href);
-                if (dest.origin === getTopOrigin()) {
-                    // Same-origin window.open during a trusted click with a normal target
-                    // (_blank / empty / standard keyword) → SPA opening a content page in a
-                    // new tab (e.g. baomoi). Allow it.
-                    // BUT: named windows like 'ok_13455080' are an ad trick — the page opens
-                    // itself as a named window so a later script can navigate that window to
-                    // an ad URL. Treat those as ad popups regardless of trusted click.
-                    const isStandardTarget = !name || name === '_blank' || name === '_self' ||
-                        name === '_top' || name === '_parent' || name === '_new';
-                    if (isTrustedClickOnLink && isStandardTarget) {
-                        return originalOpen.call(window, url, name, specs);
-                    }
-                    // Suspicious named window with trusted click → silent block + replay
-                    // (ad trick hijacking user's click).
-                    if (isTrustedClickOnLink) {
-                        popupBlockedDuringClick = true;
-                        if (!isReplayingClick) replayClickAfterBlock();
-                        return fakeWindow;
-                    }
-                    // No trusted click → page auto-opened this popup → ASK.
-                    askPopup(targetUrl, name, specs);
-                    return fakeWindow;
-                }
-            } catch (_) { }
+
+        if (getNavAction(targetUrl) === 'BLOCK') {
+            if (isTrustedClickOnLink) {
+                popupBlockedDuringClick = true;
+                if (!isReplayingClick) replayClickAfterBlock();
+            }
+            return fakeWindow;
         }
 
-        // If content.js hasn't written data-pg-popup-action yet, we don't know
-        // the correct action for this site. Buffer the call and replay it once
-        // the attribute is set (via MutationObserver above). This avoids both:
-        //   - defaulting to ASK (wrongly blocks allowlisted sites like live.com)
-        //   - defaulting to ALLOW (wrongly lets ad-site popups through)
         if (!isReady()) {
-            // Return a proxy window that replays the real decision asynchronously.
             let _realWin = null;
             const proxy = {
                 closed: false,
@@ -257,7 +228,7 @@
                 focus() { _realWin?.focus(); },
                 blur() { _realWin?.blur(); },
                 postMessage(...a) { _realWin?.postMessage(...a); },
-                location: { href: 'about:blank', assign() {}, replace() {} },
+                location: { href: 'about:blank', assign() { }, replace() { } },
             };
             _pendingOpens.push({
                 url: targetUrl, name, specs,
@@ -267,37 +238,54 @@
         }
 
         const action = getPopupAction();
-        if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
+
+        if (action === 'BLOCK') {
+            if (isTrustedClickOnLink) {
+                popupBlockedDuringClick = true;
+                if (!isReplayingClick) replayClickAfterBlock();
+            }
+            return fakeWindow;
+        }
+
+        if (action === 'ALLOW') {
+            return originalOpen.call(window, url, name, specs);
+        }
+
+        if (targetUrl !== 'about:blank') {
+            try {
+                const dest = new URL(targetUrl, location.href);
+                if (dest.origin === getTopOrigin()) {
+                    const isStandardTarget = !name || name === '_blank' || name === '_self' ||
+                        name === '_top' || name === '_parent' || name === '_new';
+                    if (isTrustedClickOnLink && isStandardTarget) {
+                        return originalOpen.call(window, url, name, specs);
+                    }
+                    if (isTrustedClickOnLink) {
+                        popupBlockedDuringClick = true;
+                        if (!isReplayingClick) replayClickAfterBlock();
+                        return fakeWindow;
+                    }
+                    askPopup(targetUrl, name, specs);
+                    return fakeWindow;
+                }
+            } catch (_) { }
+        }
+
+        if (isTrustedClickOnLink && trustedLinkUrl) {
             try {
                 if (new URL(targetUrl, location.href).href === trustedLinkUrl)
                     return originalOpen.call(window, url, name, specs);
             } catch (_) { }
         }
-        if (action === 'BLOCK') {
-            // If popup was triggered outside a trusted click context (e.g. auto-popup on
-            // page load / timer), we must ASK instead of silently blocking — the user
-            // should be aware the page tried to open something.
-            if (!isTrustedClickOnLink) {
-                askPopup(targetUrl, name, specs);
-                return fakeWindow;
-            }
+
+        if (isTrustedClickOnLink) {
             popupBlockedDuringClick = true;
             if (!isReplayingClick) replayClickAfterBlock();
             return fakeWindow;
         }
-        if (action === 'ASK') {
-            if (isTrustedClickOnLink) {
-                // Cross-origin window.open during a trusted click = ad script hijacking click.
-                // Block silently and replay so the user's intended navigation proceeds.
-                popupBlockedDuringClick = true;
-                if (!isReplayingClick) replayClickAfterBlock();
-                return fakeWindow;
-            }
-            // No trusted click = page auto-opened popup → ASK.
-            askPopup(targetUrl, name, specs);
-            return fakeWindow;
-        }
-        return originalOpen.call(window, url, name, specs);
+
+        askPopup(targetUrl, name, specs);
+        return fakeWindow;
     };
 
     try {
@@ -323,27 +311,28 @@
             return;
         }
 
-        try {
-            const dest = new URL(url, location.href);
-            if (dest.origin === location.origin) {
-                doNavigate(url);
-                return;
-            }
-        } catch (e) { doNavigate(url); return; }
-
         if (getNavAction(url) === 'BLOCK') return;
 
-        if (!isSiteHasAds()) { doNavigate(url); return; }
+        const action = getPopupAction();
+        if (action === 'ALLOW') { doNavigate(url); return; }
 
-        // Allow if this navigation matches the URL the user originally clicked, even if
-        // isTrustedClickOnLink was already cleared by the click event's setTimeout(0).
+        let isSameOrigin = false;
+        try {
+            const dest = new URL(url, location.href);
+            isSameOrigin = (dest.origin === location.origin);
+        } catch (e) { isSameOrigin = true; }
+
+        if (isSameOrigin) {
+            doNavigate(url);
+            return;
+        }
+
+        if (action === 'BLOCK') return;
+
         if (trustedLinkUrlForNav) {
             try { if (new URL(url, location.href).href === trustedLinkUrlForNav) { doNavigate(url); return; } } catch (_) {}
         }
 
-        const action = getPopupAction();
-        if (action === 'ALLOW') { doNavigate(url); return; }
-        if (action === 'BLOCK') { return; }
         askPopup(url, '_self', '', true);
     };
 
@@ -403,15 +392,26 @@
                 return;
             }
 
-            if (!isSiteHasAds()) return;
+            if (getNavAction(e.destination.url) === 'BLOCK') {
+                e.preventDefault();
+                return;
+            }
+
+            const action = getPopupAction();
+            if (action === 'ALLOW') return;
+
+            let isSameOrigin = false;
             try {
                 const dest = new URL(e.destination.url);
-                if (dest.origin === location.origin) return;
-            } catch (_) { return; }
-            const action = getPopupAction();
-            if (e.userInitiated) return;
+                isSameOrigin = (dest.origin === location.origin);
+            } catch (_) { }
+            if (isSameOrigin) return;
+
             if (action === 'BLOCK') { e.preventDefault(); return; }
-            if (action === 'ASK') { e.preventDefault(); askPopup(e.destination.url, '_self', '', true); }
+
+            if (e.userInitiated) return;
+            e.preventDefault();
+            askPopup(e.destination.url, '_self', '', true);
         });
     }
 
@@ -498,9 +498,10 @@
 
         if (e.defaultPrevented && e.type !== 'mousedown') return;
 
+        const action = getPopupAction();
+
         if (!e.isTrusted) {
             if ((e.metaKey || e.ctrlKey) && e.type === 'click') {
-
                 stopEvent(e);
                 const a = e.composedPath().find(el => el.tagName === 'A');
                 if (a && a.href) a.removeAttribute('href');
@@ -510,9 +511,9 @@
             const a = e.composedPath().find(el => el.tagName === 'A');
             if (a && a.href) {
                 if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
-                const action = checkCrossOriginPopup(a.href);
                 if (action === 'BLOCK') { stopEvent(e); return; }
-                if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_self', '', true); return; }
+                if (action === 'ALLOW') { return; }
+                stopEvent(e); askPopup(a.href, a.target || '_self', '', true); return;
             }
             return;
         }
@@ -526,62 +527,47 @@
 
         const forceNewTab = e.type === 'auxclick';
         if (!forceNewTab && !isNewTabTarget(getEffectiveTarget(a))) {
-            // _self link: only interfere if a popup was blocked during this click
-            // AND the current href doesn't match what user originally clicked.
-            // If it matches → genuine user click → let it through.
             if (e.type === 'click' && popupBlockedDuringClick) {
                 try {
                     if (trustedLinkUrl && new URL(a.href, location.href).href === trustedLinkUrl) return;
                 } catch (_) { }
-                const action = checkCrossOriginPopup(a.href);
                 if (action === 'BLOCK') { stopEvent(e); return; }
-                if (action === 'ASK') { stopEvent(e); askPopup(a.href, '_self', '', true); return; }
+                if (action === 'ALLOW') { return; }
+                stopEvent(e); askPopup(a.href, '_self', '', true); return;
             }
             return;
         }
 
+        if (action === 'ALLOW') return;
 
-        let action = checkCrossOriginPopup(a.href);
-        if (action === null) return; // same-origin _blank is fine
+        let isSameOrigin = false;
+        try {
+            const dest = new URL(a.href, location.href);
+            isSameOrigin = (dest.origin === getTopOrigin());
+        } catch (_) { }
 
-        // Trusted click: user explicitly clicked this <a> element.
-        // If the href matches what was recorded at mousedown (trustedLinkUrl), the link
-        // was not rewritten — this is genuine user intent. Always allow, regardless of
-        // site action. Never ask or block a real user click on a real link.
+        if (isSameOrigin) return;
+
         if (e.isTrusted) {
-            try {
-                if (trustedLinkUrl && new URL(a.href, location.href).href === trustedLinkUrl) {
-                    return; // legit click, let browser handle normally
-                }
-            } catch (_) { }
-
-            // href differs from what was recorded at mousedown → ad script rewrote it.
-            // Navigate to the original URL the user intended (trustedLinkUrl).
             if (trustedLinkUrl) {
                 stopEvent(e);
+                if (getNavAction(trustedLinkUrl) === 'BLOCK') return;
                 try {
                     const trustedDest = new URL(trustedLinkUrl);
                     if (trustedDest.origin === location.origin) {
-                        // Same-origin rewrite → navigate same-tab via raw assign (bypass interceptNav).
                         origAssign.call(location, trustedLinkUrl);
                         return;
                     }
                 } catch (_) { }
-                // Cross-origin rewrite → ask with the original URL, using isNav so ALLOW works.
+                if (action === 'BLOCK') return;
                 askPopup(trustedLinkUrl, a.target || '_blank', '', true);
                 return;
             }
-
-            // No trustedLinkUrl: safety timer expired or user clicked non-<a> element.
-            // Can't confirm this is a real content link, but it IS a trusted browser event,
-            // so give benefit of the doubt — let it through. Worst case: an ad opens, which
-            // the browser popup blocker will likely catch anyway.
             return;
         }
-
-        // Untrusted (synthetic) click on _blank link.
+        
         if (action === 'BLOCK') { stopEvent(e); return; }
-        if (action === 'ASK') { stopEvent(e); askPopup(a.href, a.target || '_blank', '', true); }
+        stopEvent(e); askPopup(a.href, a.target || '_blank', '', true);
     };
 
     const handleFormSubmitEvent = (e) => {
@@ -604,6 +590,10 @@
         if (isNewTabTarget(getEffectiveTarget(form))) {
             if (!isSiteHasAds()) return;
             let action = checkCrossOriginPopup(form.action);
+            if (action === 'BLOCK') {
+                stopEvent(e);
+                return;
+            }
             if (action === 'ASK') {
                 if (e.isTrusted && !popupBlockedDuringClick) return;
                 stopEvent(e);
@@ -664,8 +654,7 @@
     hookDispatch(HTMLElement.prototype);
     if (window.HTMLAnchorElement) hookDispatch(HTMLAnchorElement.prototype);
 
-    // Note: no bubble-phase click listener needed here — handleLinkEvent (capture)
-    // already handles all trusted clicks correctly using trustedLinkUrl.
+
 
     const hookClick = (proto) => {
         if (!proto || !proto.click) return;
@@ -746,7 +735,7 @@
 
     const protectWindow = (w) => {
         if (!w || protectedWindows.has(w)) return;
-        try { w.Object; } catch (_) { return; } // cross-origin → bail
+        try { w.Object; } catch (_) { return; }
         protectedWindows.add(w);
         try {
             const wOpen = w.open;
@@ -758,6 +747,29 @@
                         try { if (w.top.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
                     }
                     const targetUrl = url || 'about:blank';
+
+                    if (getNavAction(targetUrl) === 'BLOCK') {
+                        if (isTrustedClickOnLink) {
+                            popupBlockedDuringClick = true;
+                            if (!isReplayingClick) replayClickAfterBlock();
+                        }
+                        return fakeWindow;
+                    }
+
+                    const action = getPopupAction();
+
+                    if (action === 'BLOCK') {
+                        if (isTrustedClickOnLink) {
+                            popupBlockedDuringClick = true;
+                            if (!isReplayingClick) replayClickAfterBlock();
+                        }
+                        return fakeWindow;
+                    }
+
+                    if (action === 'ALLOW') {
+                        return wOpen.call(w, url, name, specs);
+                    }
+
                     if (targetUrl !== 'about:blank') {
                         try {
                             const dest = new URL(targetUrl, location.href);
@@ -766,41 +778,33 @@
                                     name === '_top' || name === '_parent' || name === '_new';
                                 if (isTrustedClickOnLink && isStandardTarget)
                                     return wOpen.call(w, url, name, specs);
-                                // Suspicious named window + trusted click → silent block + replay.
+
                                 if (isTrustedClickOnLink) {
                                     popupBlockedDuringClick = true;
                                     if (!isReplayingClick) replayClickAfterBlock();
                                     return fakeWindow;
                                 }
-                                // No trusted click → auto popup → ASK.
                                 askPopup(targetUrl, name, specs);
                                 return fakeWindow;
                             }
                         } catch (_) { }
                     }
-                    const action = getPopupAction();
-                    if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
+
+                    if (isTrustedClickOnLink && trustedLinkUrl) {
                         try {
                             if (new URL(targetUrl, location.href).href === trustedLinkUrl)
                                 return wOpen.call(w, url, name, specs);
                         } catch (_) { }
                     }
-                    if (action === 'BLOCK') {
-                        // Auto-popup (no trusted click) must ASK, not silently block.
-                        if (!isTrustedClickOnLink) {
-                            askPopup(targetUrl, name, specs);
-                            return fakeWindow;
-                        }
+
+                    if (isTrustedClickOnLink) {
                         popupBlockedDuringClick = true;
                         if (!isReplayingClick) replayClickAfterBlock();
                         return fakeWindow;
                     }
-                    if (action === 'ASK') {
-                        popupBlockedDuringClick = true;
-                        askPopup(targetUrl, name, specs);
-                        return fakeWindow;
-                    }
-                    return wOpen.call(w, url, name, specs);
+                    
+                    askPopup(targetUrl, name, specs);
+                    return fakeWindow;
                 },
                 set: () => { },
                 configurable: true
@@ -853,15 +857,14 @@
 
     const protectIframe = (el) => {
         if (el.tagName !== 'IFRAME' && el.tagName !== 'FRAME') return;
-        // Try immediately (works if iframe already loaded)
+
         try { protectWindow(el.contentWindow); } catch (_) { }
-        // Also hook on load — iframe may not have documentElement yet when added to DOM
+
         el.addEventListener('load', () => {
             try { protectWindow(el.contentWindow); } catch (_) { }
         });
     };
 
-    // Protect iframes already in the DOM at injection time
     document.querySelectorAll('iframe, frame').forEach(protectIframe);
 
 
