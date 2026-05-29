@@ -75,6 +75,7 @@
     let isReplayingClick = false;
     let popupBlockedDuringClick = false;
     let isTrustedClickOnLink = false;
+    let trustedIframeOrigin = null;
     let trustedLinkUrl = null;
     let trustedClickSafetyTimer = null;
     // Survives the setTimeout(0) clear in the click handler so interceptNav can still use it.
@@ -85,7 +86,9 @@
         if (e.isTrusted && !isReplayingClick) {
             lastMousedownPos = { x: e.clientX, y: e.clientY };
             popupBlockedDuringClick = false;
-            const a = e.composedPath ? e.composedPath().find(el => el.tagName === 'A') : e.target?.closest?.('a');
+            const path = e.composedPath ? e.composedPath() : [];
+            const a = path.find(el => el.tagName === 'A') || e.target?.closest?.('a');
+            const iframe = path.find(el => el.tagName === 'IFRAME' || el.tagName === 'FRAME');
             isTrustedClickOnLink = !!(a && a.href);
             trustedLinkUrl = null;
             trustedLinkUrlForNav = null;
@@ -94,6 +97,14 @@
                 try { trustedLinkUrl = new URL(a.href, location.href).href; } catch (_) { }
                 trustedLinkUrlForNav = trustedLinkUrl;
                 trustedClickSafetyTimer = setTimeout(() => { isTrustedClickOnLink = false; trustedLinkUrl = null; trustedLinkUrlForNav = null; }, 1000);
+            } else if (iframe) {
+                isTrustedClickOnLink = true;
+                trustedLinkUrl = null;
+                // Store iframe origin so interceptedOpen can verify destination matches.
+                try { trustedIframeOrigin = new URL(iframe.src).origin; } catch (_) { trustedIframeOrigin = null; }
+                trustedClickSafetyTimer = setTimeout(() => { isTrustedClickOnLink = false; trustedIframeOrigin = null; }, 1000);
+            } else {
+                trustedIframeOrigin = null;
             }
         }
     }, true);
@@ -278,12 +289,30 @@
         }
 
         const action = getPopupAction();
-        if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
+        // isTrustedClickOnLink=true + trustedLinkUrl=null means user clicked an
+        // iframe (e.g. YouTube embed). window.open from that context is user-initiated.
+        if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl === null) {
+            // Only allow if destination matches the iframe's origin.
             try {
-                if (new URL(targetUrl, location.href).href === trustedLinkUrl)
+                if (!trustedIframeOrigin || new URL(targetUrl).origin === trustedIframeOrigin)
                     return originalOpen.call(window, url, name, specs);
             } catch (_) { }
         }
+        if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
+            try {
+                const dest = new URL(targetUrl, location.href);
+                const trusted = new URL(trustedLinkUrl);
+                // Match on origin+pathname — destination may have extra tracking
+                // query params appended (e.g. source_ve_path, embeds_referring_euri)
+                // that weren't in the href at mousedown time.
+                if (dest.origin === trusted.origin && dest.pathname === trusted.pathname)
+                    return originalOpen.call(window, url, name, specs);
+            } catch (_) { }
+        }
+        // If there's no tracked link click but the browser reports user activation
+        // (e.g. user clicked inside a cross-origin iframe like YouTube embed),
+        // AND no popup has already been blocked in this click cycle (which would
+        // indicate an ad script hijacking the gesture), treat as genuine user open.
         if (action === 'BLOCK') {
             if (isTrustedClickOnLink) {
                 popupBlockedDuringClick = true;
@@ -828,10 +857,13 @@
                     const action = getPopupAction();
                     if (isTrustedClickOnLink && action === 'ASK' && trustedLinkUrl) {
                         try {
-                            if (new URL(targetUrl, location.href).href === trustedLinkUrl)
+                            const dest = new URL(targetUrl, location.href);
+                            const trusted = new URL(trustedLinkUrl);
+                            if (dest.origin === trusted.origin && dest.pathname === trusted.pathname)
                                 return wOpen.call(w, url, name, specs);
                         } catch (_) { }
                     }
+
                     if (action === 'BLOCK') {
                         if (isTrustedClickOnLink) {
                             popupBlockedDuringClick = true;
