@@ -89,6 +89,7 @@
             lastMousedownPos = { x: e.clientX, y: e.clientY };
             popupBlockedDuringClick = false;
             popupOpenedDuringClick = false;
+
             const path = e.composedPath ? e.composedPath() : [];
             const a = path.find(el => el.tagName === 'A') || e.target?.closest?.('a');
             const iframe = path.find(el => el.tagName === 'IFRAME' || el.tagName === 'FRAME');
@@ -177,6 +178,7 @@
 
     document.addEventListener('click', e => {
         if (e.isTrusted && !isReplayingClick) {
+
             clearTimeout(replayTimeoutId);
             clearTimeout(clickCleanupTimer);
             clickCleanupTimer = setTimeout(() => {
@@ -218,10 +220,12 @@
 
         clearTimeout(replayTimeoutId);
         replayTimeoutId = setTimeout(() => {
+
             if (popupPending) {
                 // The askPopup UI is visible. Queue the navigation to happen AFTER the user clicks Block/Allow.
                 pendingNav = {
                     fn: u => {
+
                         bypassNext = true;
                         if (origAssign) origAssign.call(location, u);
                         else location.href = u;
@@ -232,8 +236,15 @@
             }
 
             // Manually navigate the current tab to the trusted link URL.
+
             bypassNext = true;
-            if (origAssign) origAssign.call(location, targetUrl);
+            try {
+                if (origAssign) origAssign.call(window.location, targetUrl);
+                else window.location.assign(targetUrl);
+            } catch (e) {
+
+                window.location.href = targetUrl;
+            }
         }, 100);
     };
 
@@ -250,6 +261,7 @@
     });
 
     const interceptedOpen = function (url, name, specs) {
+
         if (!isReady()) console.warn('PopupGuard not ready yet');
         if (name && typeof name === 'string') {
             try { if (window.frames[name]) return originalOpen.call(window, url, name, specs); } catch (_) { }
@@ -266,18 +278,23 @@
                         const isForcedNewTab = (name === '_blank' || name === '_new') && (trustedLinkTarget !== '_blank' && trustedLinkTarget !== '_new');
 
                         if (isForcedNewTab) {
+
                             popupBlockedDuringClick = true;
                             if (!isReplayingClick) replayClickAfterBlock();
                             return fakeWindow;
                         }
+
+
                         popupOpenedDuringClick = true;
                         return originalOpen.call(window, url, name, specs);
                     }
                     if (isTrustedClickOnLink) {
+
                         popupBlockedDuringClick = true;
                         if (!isReplayingClick) replayClickAfterBlock();
                         return fakeWindow;
                     }
+
                     if (getPopupAction() === 'BLOCK') return fakeWindow;
                     askPopup(targetUrl, name, specs);
                     return fakeWindow;
@@ -314,12 +331,15 @@
             try {
                 const dest = new URL(targetUrl, location.href);
                 const trusted = new URL(trustedLinkUrl);
+
                 if (dest.origin === trusted.origin && dest.pathname === trusted.pathname) {
+
                     popupOpenedDuringClick = true;
                     return originalOpen.call(window, url, name, specs);
                 }
             } catch (_) { }
         }
+
         if (action === 'BLOCK') {
             if (isTrustedClickOnLink) {
                 popupBlockedDuringClick = true;
@@ -328,9 +348,11 @@
             return fakeWindow;
         }
         if (action === 'ASK') {
+
             askPopup(targetUrl, name, specs);
             return fakeWindow;
         }
+
         return originalOpen.call(window, url, name, specs);
     };
 
@@ -347,11 +369,13 @@
     let bypassNext = false;
 
     const interceptNav = (url, doNavigate) => {
+
         // ── Hijack guard 3: popup opened during this click cycle ──────────────
         // Pattern: window.open(realUrl, "_blank") then document.location = adUrl
         // Real content opened in new tab, this navigation is the ad hijacking the tab.
         // MUST be above popupPending to catch hijacks that happen while a previous block is replaying.
         if (popupOpenedDuringClick) {
+
             if (waitForReady(() => interceptNav(url, doNavigate))) return;
             const action = getPopupAction();
             if (action === 'ALLOW') { doNavigate(url); return; }
@@ -470,7 +494,8 @@
         Object.defineProperty(document, 'location', {
             get() { return location; },
             set(v) {
-                interceptNav(String(v), u => { if (origAssign) origAssign.call(location, u); else location.href = u; });
+
+                interceptNav(String(v), u => { location.href = u; });
             },
             configurable: true,
             enumerable: true
@@ -479,26 +504,24 @@
 
     if (window.navigation) {
         window.navigation.addEventListener('navigate', e => {
+
             if (e.hashChange || e.downloadRequest) return;
             if (bypassNext) { bypassNext = false; return; }
 
             // Hijack guard 3: script tried to double-navigate (either popup opened or popup blocked).
             if (popupOpenedDuringClick || popupBlockedDuringClick) {
                 const action = getPopupAction();
+
                 if (action === 'ALLOW') return;
 
                 const dest = new URL(e.destination.url);
                 if (dest.origin === location.origin) {
-                    if (popupBlockedDuringClick) {
-                        // Same-origin fallback navigation (often the article). Silently cancel it.
-                        // replayClickAfterBlock will handle the true navigation.
-                        e.preventDefault();
-                    }
+                    // Same-origin fallback navigation (often the article). Silently cancel it.
+                    // replayClickAfterBlock will handle the true navigation.
+                    e.preventDefault();
                     return;
                 }
-                // Delay window.stop() slightly to allow legitimate window.open to escape,
-                // while still aborting the cross-origin ad navigation.
-                setTimeout(() => window.stop(), 50);
+
 
                 e.preventDefault();
                 // If we blocked the popup, replayClickAfterBlock is already scheduled to navigate the tab.
@@ -973,14 +996,6 @@
                                 const isStandardTarget = !name || name === '_blank' || name === '_self' ||
                                     name === '_top' || name === '_parent' || name === '_new';
                                 if (isTrustedClickOnLink && isStandardTarget) {
-                                    const isForcedNewTab = (name === '_blank' || name === '_new') && (trustedLinkTarget !== '_blank' && trustedLinkTarget !== '_new');
-
-                                    if (isForcedNewTab) {
-                                        popupBlockedDuringClick = true;
-                                        if (!isReplayingClick) replayClickAfterBlock();
-                                        return fakeWindow;
-                                    }
-
                                     popupOpenedDuringClick = true;
                                     return wOpen.call(w, url, name, specs);
                                 }
@@ -1047,9 +1062,7 @@
             const childDoc = w.document;
             Object.defineProperty(childDoc, 'location', {
                 get() { return childDoc.defaultView.location; },
-                set(v) {
-                    interceptNav(String(v), u => { origAssign.call(childDoc.defaultView.location, u); });
-                },
+                set(v) { interceptNav(String(v), u => { childDoc.defaultView.location.href = u; }); },
                 configurable: true,
                 enumerable: true
             });
