@@ -9,12 +9,31 @@
             : host === x);
     };
 
-    const getPopupAction = () => {
-        return document.documentElement?.getAttribute('data-pg-popup-action') || 'ASK';
+    let cachedPopupAction = 'ASK';
+    let cachedNavBlock = '[]';
+    let _hasBeenReady = false;
+
+    const updateCachedData = () => {
+        const docEl = document.documentElement;
+        if (!docEl) return;
+        if (docEl.hasAttribute('data-pg-popup-action')) {
+            cachedPopupAction = docEl.getAttribute('data-pg-popup-action');
+            _hasBeenReady = true;
+        }
+        if (docEl.hasAttribute('data-pg-nbl')) {
+            cachedNavBlock = docEl.getAttribute('data-pg-nbl');
+        }
     };
 
-    // True once content.js has written data-pg-popup-action at least once.
-    const isReady = () => document.documentElement.hasAttribute('data-pg-popup-action');
+    const getPopupAction = () => {
+        updateCachedData();
+        return cachedPopupAction;
+    };
+
+    const isReady = () => {
+        updateCachedData();
+        return _hasBeenReady;
+    };
 
     // Each entry: { resolve, url, name, specs }
     const _pendingOpens = [];
@@ -32,10 +51,12 @@
             fn();
         }
     });
-    _readyObserver.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['data-pg-popup-action']
-    });
+    if (document.documentElement) {
+        _readyObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['data-pg-popup-action']
+        });
+    }
 
     const waitForReady = (fn) => {
         if (isReady()) { fn(); return false; }
@@ -60,15 +81,15 @@
     const getNavAction = (url) => {
         try {
             const dest = new URL(url, location.href);
-            const nbl = JSON.parse(document.documentElement?.getAttribute('data-pg-nbl') || '[]');
+            updateCachedData();
+            const nbl = JSON.parse(cachedNavBlock);
             if (checkMatch(dest.hostname.toLowerCase(), nbl)) return 'BLOCK';
         } catch (e) { }
         return 'ALLOW';
     };
 
     let popupPending = false;
-    const isSiteHasAds = () =>
-        document.documentElement?.getAttribute('data-pg-popup-action') === 'BLOCK';
+    const isSiteHasAds = () => getPopupAction() === 'BLOCK';
 
     let pendingNav = null;
     let lastMousedownPos = null;
@@ -115,12 +136,19 @@
         }
     }, true);
 
+    const getNonce = () => {
+        const el = document.querySelector('[nonce]');
+        return el ? el.nonce : '';
+    };
+
     const freezePage = () => {
         if (document.getElementById('pg-freeze')) return;
         HTMLMediaElement.prototype.play = function () { return Promise.resolve(); };
         document.querySelectorAll('video, audio').forEach(m => { if (!m.paused) m.pause(); });
         const style = document.createElement('style');
         style.id = 'pg-freeze';
+        const nonce = getNonce();
+        if (nonce) style.nonce = nonce;
         style.textContent = '*, *::before, *::after { animation-play-state: paused !important; transition: none !important; }';
         document.head?.appendChild(style);
     };
@@ -1119,6 +1147,14 @@
         if (document.documentElement && currentDocEl !== document.documentElement) {
             currentDocEl = document.documentElement;
             attachDocListeners(document);
+            if (!_hasBeenReady) {
+                try {
+                    _readyObserver.observe(document.documentElement, {
+                        attributes: true,
+                        attributeFilter: ['data-pg-popup-action']
+                    });
+                } catch (_) { }
+            }
         }
         for (const m of mutations) {
             for (const node of m.addedNodes) {
