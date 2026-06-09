@@ -516,9 +516,12 @@
 
                 const dest = new URL(e.destination.url);
                 if (dest.origin === location.origin) {
-                    // Same-origin fallback navigation (often the article). Silently cancel it.
-                    // replayClickAfterBlock will handle the true navigation.
-                    e.preventDefault();
+                    // Same-origin fallback navigation (often the article).
+                    // If popup was opened, cancel this tab's hijack.
+                    if (popupOpenedDuringClick) {
+                        e.preventDefault();
+                    }
+                    // If popup was blocked, let the same-origin navigation proceed so we don't lose the click.
                     return;
                 }
 
