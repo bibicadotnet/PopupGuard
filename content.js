@@ -235,7 +235,20 @@ window.addEventListener('message', async e => {
         }
         return;
     }
-    showDialog(url, src, name, specs, isNav || false, token);
+    // Auto-allow file downloads
+    chrome.runtime.sendMessage({ action: 'CHECK_DOWNLOAD', url }, response => {
+        if (response?.isDownload) {
+            window.postMessage({ action: 'PG_DIALOG_CLOSED' }, '*');
+            if (isNav) {
+                const topToken = document.documentElement?.getAttribute('data-pg-nav-token') || token;
+                window.postMessage({ action: 'PG_DO_NAV', url, token: topToken }, '*');
+            } else {
+                window.postMessage({ action: 'PG_DO_OPEN', url, name, specs }, '*');
+            }
+            return;
+        }
+        showDialog(url, src, name, specs, isNav || false, token);
+    });
 });
 
 // ── Overlay remover (BLOCK sites only) ───────────────────────────────────────

@@ -23,3 +23,19 @@ chrome.runtime.onStartup.addListener(syncRules);
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && changes.navBlock) syncRules();
 });
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.action === 'CHECK_DOWNLOAD') {
+        fetch(msg.url, { method: 'HEAD' })
+            .then(r => {
+                const ct = (r.headers.get('content-type') || '').toLowerCase();
+                const cd = (r.headers.get('content-disposition') || '').toLowerCase();
+                const isHtml = ct.includes('text/html') || ct.includes('application/xhtml+xml');
+                const isAttachment = cd.includes('attachment');
+                const isDownload = isAttachment || (!isHtml && ct !== '');
+                sendResponse({ isDownload });
+            })
+            .catch(() => sendResponse({ isDownload: false }));
+        return true;
+    }
+});
