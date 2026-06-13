@@ -111,7 +111,7 @@
 
     document.addEventListener('click', e => {
         if (!e.isTrusted || isReplaying) return;
-        clearTimeout(replayTimer);
+        if (!popupBlocked) clearTimeout(replayTimer);
         clearTimeout(clickCleanup);
         clickCleanup = setTimeout(() => { popupOpened = false; popupBlocked = false; }, 500);
         if (trustedClick) {
