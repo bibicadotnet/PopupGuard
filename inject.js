@@ -116,7 +116,11 @@
         clickCleanup = setTimeout(() => { popupOpened = false; popupBlocked = false; }, 500);
         if (trustedClick) {
             clearTimeout(trustedTimer);
-            setTimeout(() => { trustedClick = false; trustedUrl = null; trustedTarget = '_self'; }, 0);
+            const hrefBefore = location.href;
+            setTimeout(() => {
+                if (e.defaultPrevented && !e._pgStopped && trustedUrl && !popupPending && !popupOpened && location.href === hrefBefore) replayAfterBlock();
+                trustedClick = false; trustedUrl = null; trustedTarget = '_self';
+            }, 0);
         }
     }, true);
 
@@ -537,6 +541,7 @@
     const origSIP = Event.prototype.stopImmediatePropagation;
 
     const stopEvent = e => {
+        e._pgStopped = true;
         try { origPD.call(e); } catch (_) { }
         try { origSP.call(e); } catch (_) { }
         try { origSIP.call(e); } catch (_) { }
