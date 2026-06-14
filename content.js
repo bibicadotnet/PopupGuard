@@ -41,13 +41,12 @@ const syncData = async () => {
         _staticList = await fetch(chrome.runtime.getURL('allowlist.json'))
             .then(r => r.json()).catch(() => []);
     }
-    // Phase 1: static list first (fast) so inject.js gets correct action ASAP
-    _pal = [..._staticList];
-    _pbl = [];
     const topHost = getTopHost();
-    document.documentElement.setAttribute('data-pg-popup-action', computeAction(topHost));
 
-    // Phase 2: merge user overrides
+    // Load static list + user overrides together before signalling inject.js.
+    // Previously Phase 1 set the attribute early (with empty popupBlock), causing
+    // inject.js to latch onto ASK and miss the subsequent BLOCK update when the
+    // _readyObs was already disconnected.
     const data = await chrome.storage.sync.get(['popupAllow', 'popupBlock', 'navBlock']);
     _pal = [...new Set([..._staticList, ...(data.popupAllow || [])])];
     _pbl = data.popupBlock || [];
