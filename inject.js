@@ -116,9 +116,7 @@
         clickCleanup = setTimeout(() => { popupOpened = false; popupBlocked = false; }, 500);
         if (trustedClick) {
             clearTimeout(trustedTimer);
-            const hrefBefore = location.href;
             setTimeout(() => {
-                if (e.defaultPrevented && !e._pgStopped && trustedUrl && !popupPending && !popupOpened && location.href === hrefBefore) replayAfterBlock();
                 trustedClick = false; trustedUrl = null; trustedTarget = '_self';
             }, 0);
         }
@@ -347,6 +345,7 @@
         if (action === 'ASK') {
             popupBlocked = true;
             askPopup(targetUrl, name, specs);
+            if (trustedClick && !isReplaying) replayAfterBlock();
             return fakeWindow;
         }
 
