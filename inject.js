@@ -1,6 +1,9 @@
 (function () {
     'use strict';
 
+    // ── PG Logger ─────────────────────────────────────────────────────────────
+    const PG = (...a) => console.log('[PG]', ...a);
+
     // ── State ─────────────────────────────────────────────────────────────────
 
     const checkMatch = (host, list) => {
@@ -18,10 +21,16 @@
         const d = document.documentElement;
         if (!d) return;
         if (d.hasAttribute('data-pg-popup-action')) {
+            const prev = cachedAction;
             cachedAction = d.getAttribute('data-pg-popup-action');
-            _ready = true;
+            if (!_ready) { _ready = true; PG('STATE ready, action=', cachedAction); }
+            else if (prev !== cachedAction) PG('STATE action changed:', prev, '->', cachedAction);
         }
-        if (d.hasAttribute('data-pg-nbl')) cachedNbl = d.getAttribute('data-pg-nbl');
+        if (d.hasAttribute('data-pg-nbl')) {
+            const prev = cachedNbl;
+            cachedNbl = d.getAttribute('data-pg-nbl');
+            if (prev !== cachedNbl) PG('STATE navBlock updated:', cachedNbl);
+        }
     };
 
     const getAction = () => { updateCache(); return cachedAction; };
@@ -34,6 +43,7 @@
     const _readyObs = new MutationObserver(() => {
         if (!isReady()) return;
         _readyObs.disconnect();
+        PG('_readyObs fired: flushing', _pendingOpens.length, 'opens,', _pendingFns.length, 'fns');
         for (const item of _pendingOpens.splice(0)) item.resolve(interceptedOpen(item.url, item.name, item.specs));
         for (const fn of _pendingFns.splice(0)) fn();
     });
@@ -41,7 +51,12 @@
         _readyObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pg-popup-action'] });
     }
 
-    const waitReady = fn => { if (isReady()) { fn(); return false; } _pendingFns.push(fn); return true; };
+    const waitReady = fn => {
+        if (isReady()) { fn(); return false; }
+        PG('waitReady: NOT ready yet, deferring fn');
+        _pendingFns.push(fn);
+        return true;
+    };
 
     const getTopOrigin = () => {
         if (window === window.top) { try { return location.origin; } catch (_) { } }
@@ -68,12 +83,12 @@
     let pendingNav = null;
     let lastPos = null;
     let isReplaying = false;
-    let popupBlocked = false;   // window.open was blocked this click cycle
-    let popupOpened = false;    // window.open was allowed this click cycle
-    let trustedClick = false;   // mousedown landed on <a> or iframe
-    let trustedUrl = null;      // href at mousedown time
+    let popupBlocked = false;
+    let popupOpened = false;
+    let trustedClick = false;
+    let trustedUrl = null;
     let trustedTarget = '_self';
-    let trustedUrlForNav = null; // same as trustedUrl but survives click handler's setTimeout(0)
+    let trustedUrlForNav = null;
     let trustedIframeOrigin = null;
     let trustedTimer = null;
     const origPlay = HTMLMediaElement.prototype.play;
@@ -97,12 +112,15 @@
             trustedTarget = a.getAttribute('target') || '_self';
             trustedIframeOrigin = null;
             trustedTimer = setTimeout(() => { trustedClick = false; trustedUrl = null; trustedUrlForNav = null; }, 1000);
+            PG('mousedown: <a> href=', trustedUrl, 'target=', trustedTarget);
         } else if (iframe) {
             trustedTarget = '_self';
             try { trustedIframeOrigin = new URL(iframe.src).origin; } catch (_) { trustedIframeOrigin = null; }
             trustedTimer = setTimeout(() => { trustedClick = false; trustedIframeOrigin = null; }, 1000);
+            PG('mousedown: <iframe> origin=', trustedIframeOrigin);
         } else {
             trustedIframeOrigin = null;
+            PG('mousedown: non-link element, tag=', e.target?.tagName);
         }
     }, true);
 
@@ -111,24 +129,24 @@
 
     document.addEventListener('click', e => {
         if (!e.isTrusted || isReplaying) return;
+        PG('click: trusted=', e.isTrusted, 'popupBlocked=', popupBlocked, 'popupOpened=', popupOpened,
+           'trustedClick=', trustedClick, 'trustedUrl=', trustedUrl, 'trustedUrlForNav=', trustedUrlForNav);
         if (!popupBlocked) clearTimeout(replayTimer);
         clearTimeout(clickCleanup);
         clickCleanup = setTimeout(() => { popupOpened = false; popupBlocked = false; }, 500);
         if (trustedClick) {
             clearTimeout(trustedTimer);
             setTimeout(() => {
+                PG('click setTimeout(0): clearing trustedClick/trustedUrl');
                 trustedClick = false; trustedUrl = null; trustedTarget = '_self';
             }, 0);
         }
     }, true);
 
-    // Bubble-phase: if popupPending was set during this click cycle (e.g. ad script
-    // called window.open → askPopup in bubble), stop the click entirely so
-    // SPA frameworks (Turbo, etc.) cannot intercept it for AJAX navigation.
     window.addEventListener('click', e => {
         if (popupPending && e.isTrusted) {
-            // Do not block clicks inside our own popup
             if (e.composedPath().some(el => el.id === 'pg-container')) return;
+            PG('bubble click: popupPending=true, stopping event');
             origPD.call(e);
             origSP.call(e);
             origSIP.call(e);
@@ -144,6 +162,7 @@
 
     const freeze = () => {
         if (document.getElementById('pg-freeze')) return;
+        PG('freeze()');
         HTMLMediaElement.prototype.play = () => Promise.resolve();
         document.querySelectorAll('video,audio').forEach(m => { if (!m.paused) m.pause(); });
         const s = document.createElement('style');
@@ -153,35 +172,28 @@
         s.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition:none!important}';
         document.head?.appendChild(s);
 
-        // Prevent SPA frameworks (Turbo, etc.) from changing URL while dialog is up
         if (!origPushState) {
             origPushState = history.pushState.bind(history);
             origReplaceState = history.replaceState.bind(history);
             history.pushState = function (...a) {
-                if (popupPending) { return; }
+                if (popupPending) { PG('freeze: blocked pushState'); return; }
                 return origPushState(...a);
             };
             history.replaceState = function (...a) {
-                if (popupPending) { return; }
+                if (popupPending) { PG('freeze: blocked replaceState'); return; }
                 return origReplaceState(...a);
             };
         }
 
-        // Guard dialog from SPA body swaps: re-append #pg-container if removed
         if (!dialogGuard) {
             dialogGuard = new MutationObserver(mutations => {
                 if (!popupPending) return;
-
-                // If the entire body/head wasn't swapped, but just pg-container was removed,
-                // it might be the user closing the dialog (which triggers remove() before postMessage).
-                // Let's check if the body itself is still the same and connected.
-                // Actually, a better check: did the mutation involve swapping the body?
-                // Or we can just defer the re-append slightly so the postMessage has time to arrive.
                 setTimeout(() => {
                     if (!popupPending) return;
                     const c = document.getElementById('pg-container');
                     if (c) { savedContainer = c; }
                     else if (savedContainer && document.body && !savedContainer.isConnected) {
+                        PG('dialogGuard: re-appending pg-container after SPA swap');
                         document.body.appendChild(savedContainer);
                         if (!document.getElementById('pg-freeze')) {
                             const s2 = document.createElement('style');
@@ -197,6 +209,7 @@
     };
 
     const unfreeze = () => {
+        PG('unfreeze()');
         HTMLMediaElement.prototype.play = origPlay;
         document.getElementById('pg-freeze')?.remove();
         if (dialogGuard) { dialogGuard.disconnect(); dialogGuard = null; }
@@ -214,6 +227,7 @@
     let safetyTimer = null;
 
     const askPopup = (url, name, specs, isNav = false) => {
+        PG('askPopup:', url, 'isNav=', isNav, 'name=', name);
         popupPending = true;
         freeze();
         let resolved = url;
@@ -222,6 +236,7 @@
         clearTimeout(safetyTimer);
         safetyTimer = setTimeout(() => {
             if (popupPending && !document.getElementById('pg-container')) {
+                PG('safetyTimer: no dialog appeared, clearing popupPending');
                 popupPending = false; unfreeze(); pendingNav = null;
             }
         }, 800);
@@ -230,11 +245,12 @@
     window.addEventListener('message', e => {
         if (e.source !== window || !e.data?.action) return;
         if (e.data.action === 'PG_DIALOG_CLOSED') {
+            PG('PG_DIALOG_CLOSED received, pendingNav=', pendingNav?.url);
             popupPending = false; unfreeze();
             if (pendingNav) { const { fn, url } = pendingNav; pendingNav = null; fn(url); }
         }
         if (e.data.action === 'PG_DO_OPEN') {
-            // Allow this time: open directly via originalOpen to bypass our hook
+            PG('PG_DO_OPEN:', e.data.url);
             try { originalOpen.call(window, e.data.url, e.data.name, e.data.specs); } catch (_) { }
         }
     });
@@ -242,7 +258,12 @@
     // ── Replay click after block ──────────────────────────────────────────────
 
     const replayAfterBlock = () => {
-        if (popupOpened || !lastPos || isReplaying) return;
+        PG('replayAfterBlock: popupOpened=', popupOpened, 'lastPos=', lastPos, 'isReplaying=', isReplaying,
+           'trustedUrl=', trustedUrl);
+        if (popupOpened || !lastPos || isReplaying) {
+            PG('replayAfterBlock: SKIPPED');
+            return;
+        }
         const { x, y } = lastPos;
         lastPos = null;
 
@@ -254,15 +275,19 @@
                 try { if (new URL(a.href, location.href).origin === location.origin) targetUrl = a.href; } catch (_) { }
             }
         }
-        if (!targetUrl) return;
+        PG('replayAfterBlock: targetUrl=', targetUrl);
+        if (!targetUrl) { PG('replayAfterBlock: no targetUrl, giving up'); return; }
 
         clearTimeout(replayTimer);
         replayTimer = setTimeout(() => {
+            PG('replayAfterBlock setTimeout: popupPending=', popupPending, 'targetUrl=', targetUrl);
             if (popupPending) {
+                PG('replayAfterBlock: popupPending, setting pendingNav');
                 pendingNav = { fn: u => { bypassNext = true; origAssign ? origAssign.call(location, u) : (location.href = u); }, url: targetUrl };
                 return;
             }
             bypassNext = true;
+            PG('replayAfterBlock: navigating to', targetUrl);
             try { origAssign ? origAssign.call(location, targetUrl) : location.assign(targetUrl); }
             catch (_) { location.href = targetUrl; }
         }, 100);
@@ -279,33 +304,43 @@
     });
 
     const interceptedOpen = function (url, name, specs) {
-        if (name && typeof name === 'string') {
-            try { if (window.frames[name]) return originalOpen.call(window, url, name, specs); } catch (_) { }
-        }
-        if (popupPending) { return fakeWindow; }
-        const targetUrl = url || 'about:blank';
-        if (getNavAction(targetUrl) === 'BLOCK') return fakeWindow;
+        PG('window.open intercepted: url=', url, 'name=', name,
+           '| popupPending=', popupPending, 'trustedClick=', trustedClick,
+           'trustedUrl=', trustedUrl, '_ready=', _ready, 'action=', cachedAction);
 
-        // Safe non-http(s) schemes (tel:, mailto:, ms-windows-store:, etc.) — pass through directly.
-        // Dangerous schemes (javascript:, data:, blob:) are NOT passed through — fall into normal intercept.
+        if (name && typeof name === 'string') {
+            try { if (window.frames[name]) { PG('window.open: named frame, pass-through'); return originalOpen.call(window, url, name, specs); } } catch (_) { }
+        }
+        if (popupPending) { PG('window.open: popupPending, fakeWindow'); return fakeWindow; }
+        const targetUrl = url || 'about:blank';
+        if (getNavAction(targetUrl) === 'BLOCK') {
+            PG('window.open: navBlock BLOCK, fakeWindow. trustedClick=', trustedClick, 'trustedUrl=', trustedUrl);
+            if (trustedClick && !isReplaying) { popupBlocked = true; replayAfterBlock(); }
+            return fakeWindow;
+        }
+
         try {
             const proto = new URL(targetUrl).protocol;
             const SAFE = ['tel:', 'mailto:', 'callto:', 'sms:', 'ms-windows-store:', 'itms:', 'itms-apps:', 'market:'];
-            if (SAFE.includes(proto)) return originalOpen.call(window, url, name, specs);
+            if (SAFE.includes(proto)) { PG('window.open: safe scheme, pass-through'); return originalOpen.call(window, url, name, specs); }
         } catch (_) { }
+
         if (targetUrl !== 'about:blank') {
             try {
                 const dest = new URL(targetUrl, location.href);
                 if (dest.origin === getTopOrigin()) {
+                    PG('window.open: same-origin target, trustedClick=', trustedClick, 'name=', name);
                     const isStd = !name || ['_blank', '_self', '_top', '_parent', '_new'].includes(name);
                     if (trustedClick && isStd) {
                         const isForcedNew = (name === '_blank' || name === '_new') && trustedTarget !== '_blank' && trustedTarget !== '_new';
-                        if (isForcedNew) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); return fakeWindow; }
+                        if (isForcedNew) { PG('window.open: same-origin forcedNew, replayAfterBlock'); popupBlocked = true; if (!isReplaying) replayAfterBlock(); return fakeWindow; }
+                        PG('window.open: same-origin trustedClick isStd, ALLOW');
                         popupOpened = true;
                         return originalOpen.call(window, url, name, specs);
                     }
-                    if (trustedClick) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); return fakeWindow; }
-                    if (getAction() === 'BLOCK') return fakeWindow;
+                    if (trustedClick) { PG('window.open: same-origin trustedClick non-std, replayAfterBlock'); popupBlocked = true; if (!isReplaying) replayAfterBlock(); return fakeWindow; }
+                    if (getAction() === 'BLOCK') { PG('window.open: same-origin BLOCK, fakeWindow'); return fakeWindow; }
+                    PG('window.open: same-origin ASK/untrusted, askPopup');
                     askPopup(targetUrl, name, specs);
                     return fakeWindow;
                 }
@@ -313,6 +348,7 @@
         }
 
         if (!isReady()) {
+            PG('window.open: NOT READY, proxy pending');
             let _win = null;
             const proxy = { closed: false, name: name || '', close() { _win?.close(); }, focus() { _win?.focus(); }, blur() { _win?.blur(); }, postMessage(...a) { _win?.postMessage(...a); }, location: { href: 'about:blank', assign() { }, replace() { } } };
             _pendingOpens.push({ url: targetUrl, name, specs, resolve(w) { _win = w; if (w && w !== fakeWindow) proxy.closed = false; } });
@@ -320,18 +356,18 @@
         }
 
         const action = getAction();
+        PG('window.open: cross-origin action=', action, 'trustedClick=', trustedClick, 'trustedUrl=', trustedUrl);
 
-        // Trusted click on iframe: allow if origin matches
         if (trustedClick && action === 'ASK' && trustedUrl === null) {
-            try { if (!trustedIframeOrigin || new URL(targetUrl).origin === trustedIframeOrigin) return originalOpen.call(window, url, name, specs); } catch (_) { }
+            try { if (!trustedIframeOrigin || new URL(targetUrl).origin === trustedIframeOrigin) { PG('window.open: iframe origin match, ALLOW'); return originalOpen.call(window, url, name, specs); } } catch (_) { }
         }
 
-        // Trusted click on link: allow if destination matches what user intended
         if (trustedClick && action === 'ASK' && trustedUrl) {
             try {
                 const dest = new URL(targetUrl, location.href);
                 const trusted = new URL(trustedUrl);
                 if (dest.origin === trusted.origin && dest.pathname === trusted.pathname) {
+                    PG('window.open: origin+path match trustedUrl, ALLOW');
                     popupOpened = true;
                     return originalOpen.call(window, url, name, specs);
                 }
@@ -339,16 +375,19 @@
         }
 
         if (action === 'BLOCK') {
+            PG('window.open: BLOCK', trustedClick ? '(trustedClick→replayAfterBlock)' : '');
             if (trustedClick) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); }
             return fakeWindow;
         }
         if (action === 'ASK') {
+            PG('window.open: ASK → askPopup');
             popupBlocked = true;
             askPopup(targetUrl, name, specs);
             if (trustedClick && !isReplaying) replayAfterBlock();
             return fakeWindow;
         }
 
+        PG('window.open: ALLOW (pass-through)');
         return originalOpen.call(window, url, name, specs);
     };
 
@@ -361,63 +400,83 @@
     let bypassNext = false;
 
     const interceptNav = (url, doNav) => {
-        // Safe non-http(s) schemes — pass through immediately
-        try { const p = new URL(url).protocol; const SAFE = ['tel:', 'mailto:', 'callto:', 'sms:', 'ms-windows-store:', 'itms:', 'itms-apps:', 'market:']; if (SAFE.includes(p)) { doNav(url); return; } } catch (_) { }
+        PG('interceptNav:', url,
+           '| ready=', _ready, 'action=', cachedAction,
+           'popupPending=', popupPending, 'popupOpened=', popupOpened,
+           'trustedClick=', trustedClick, 'trustedUrlForNav=', trustedUrlForNav,
+           'bypassNext=', bypassNext);
+
+        try { const p = new URL(url).protocol; const SAFE = ['tel:', 'mailto:', 'callto:', 'sms:', 'ms-windows-store:', 'itms:', 'itms-apps:', 'market:']; if (SAFE.includes(p)) { PG('interceptNav: safe scheme, pass'); doNav(url); return; } } catch (_) { }
 
         if (popupPending) {
+            PG('interceptNav: popupPending, queuing if same-origin');
             try { if (new URL(url, location.href).origin === location.origin) pendingNav = { fn: doNav, url }; }
             catch (_) { }
             return;
         }
 
-        // Guard 3: popup was already opened this click → this navigation is ad hijacking the tab
         if (popupOpened) {
+            PG('interceptNav: popupOpened (ad hijack guard)');
             if (waitReady(() => interceptNav(url, doNav))) return;
             const a = getAction();
+            PG('interceptNav: guard3 action=', a);
             if (a === 'ALLOW') { doNav(url); return; }
             if (a === 'BLOCK') return;
             askPopup(url, '_self', '', true);
             return;
         }
 
-        // Same-origin: always allow
         try {
-            if (new URL(url, location.href).origin === location.origin) { doNav(url); return; }
+            if (new URL(url, location.href).origin === location.origin) { PG('interceptNav: same-origin, ALLOW'); doNav(url); return; }
         } catch (_) { doNav(url); return; }
 
-        if (getNavAction(url) === 'BLOCK') {
-            // Navigation blocked - retry with original trusted URL if available
+        const navAct = getNavAction(url);
+        PG('interceptNav: getNavAction=', navAct, 'for', url);
+        if (navAct === 'BLOCK') {
+            PG('interceptNav: navBlock BLOCK. trustedClick=', trustedClick, 'trustedUrlForNav=', trustedUrlForNav);
             if (trustedClick && trustedUrlForNav) {
+                const snapNav = trustedUrlForNav;
+                PG('interceptNav: navBlock → replaying trusted URL in 50ms:', snapNav);
                 setTimeout(() => {
+                    PG('interceptNav navBlock setTimeout: popupPending=', popupPending, 'navigating to', snapNav);
                     if (popupPending) return;
                     bypassNext = true;
-                    try { origAssign ? origAssign.call(location, trustedUrlForNav) : (location.href = trustedUrlForNav); }
-                    catch (_) { location.href = trustedUrlForNav; }
+                    try { origAssign ? origAssign.call(location, snapNav) : (location.href = snapNav); }
+                    catch (_) { location.href = snapNav; }
                 }, 50);
+            } else {
+                PG('interceptNav: navBlock, no trustedUrlForNav → silent block');
             }
             return;
         }
 
-        // Guard 1: user clicked a link but navigation goes to different origin
         if (trustedUrlForNav) {
             try {
-                if (new URL(url, location.href).origin !== new URL(trustedUrlForNav).origin) {
+                const destOrigin = new URL(url, location.href).origin;
+                const navOrigin = new URL(trustedUrlForNav).origin;
+                PG('interceptNav guard1: destOrigin=', destOrigin, 'navOrigin=', navOrigin);
+                if (destOrigin !== navOrigin) {
+                    PG('interceptNav guard1: DIFFERENT ORIGIN → waitReady');
                     if (waitReady(() => interceptNav(url, doNav))) return;
                     const a = getAction();
+                    PG('interceptNav guard1 (ready): action=', a);
                     if (a === 'ALLOW') { doNav(url); return; }
                     if (a === 'BLOCK') return;
                     askPopup(url, '_self', '', true);
                     return;
+                } else {
+                    PG('interceptNav guard1: same origin as trustedUrlForNav, skip guard');
                 }
             } catch (_) { }
         }
 
-        // Guard 2: user clicked iframe but top frame navigates to different origin
         if (trustedClick && trustedUrlForNav === null) {
             try {
                 if (!trustedIframeOrigin || new URL(url, location.href).origin !== trustedIframeOrigin) {
+                    PG('interceptNav guard2 (iframe): → waitReady');
                     if (waitReady(() => interceptNav(url, doNav))) return;
                     const a = getAction();
+                    PG('interceptNav guard2 (ready): action=', a);
                     if (a === 'ALLOW') { doNav(url); return; }
                     if (a === 'BLOCK') return;
                     askPopup(url, '_self', '', true);
@@ -426,15 +485,16 @@
             } catch (_) { }
         }
 
-        if (!isSiteBlocked()) { doNav(url); return; }
+        if (!isSiteBlocked()) { PG('interceptNav: site not blocked, ALLOW'); doNav(url); return; }
 
-        // Exact match: nav to the URL user originally clicked
         if (trustedUrlForNav) {
-            try { if (new URL(url, location.href).href === trustedUrlForNav) { doNav(url); return; } } catch (_) { }
+            try { if (new URL(url, location.href).href === trustedUrlForNav) { PG('interceptNav: exact match trustedUrlForNav, ALLOW'); doNav(url); return; } } catch (_) { }
         }
 
+        PG('interceptNav: fallthrough waitReady');
         if (waitReady(() => interceptNav(url, doNav))) return;
         const a = getAction();
+        PG('interceptNav fallthrough (ready): action=', a);
         if (a === 'ALLOW') { doNav(url); return; }
         if (a === 'BLOCK') return;
         askPopup(url, '_self', '', true);
@@ -467,9 +527,16 @@
     if (window.navigation) {
         window.navigation.addEventListener('navigate', e => {
             if (e.hashChange || e.downloadRequest) return;
-            if (bypassNext) { bypassNext = false; return; }
+            PG('Navigation API navigate:', e.destination.url,
+               '| bypassNext=', bypassNext, 'popupPending=', popupPending,
+               'popupOpened=', popupOpened, 'popupBlocked=', popupBlocked,
+               'trustedUrlForNav=', trustedUrlForNav, 'trustedClick=', trustedClick,
+               'userInitiated=', e.userInitiated);
+
+            if (bypassNext) { PG('Navigation API: bypassNext, skip'); bypassNext = false; return; }
 
             if (popupPending) {
+                PG('Navigation API: popupPending, prevent+maybe pendingNav');
                 try {
                     const dest = new URL(e.destination.url);
                     e.preventDefault();
@@ -482,6 +549,7 @@
 
             if (popupOpened || popupBlocked) {
                 const a = getAction();
+                PG('Navigation API: popupOpened/Blocked, action=', a);
                 if (a === 'ALLOW') return;
                 const dest = new URL(e.destination.url);
                 if (dest.origin === location.origin) {
@@ -493,14 +561,19 @@
                 return;
             }
 
-            try { if (new URL(e.destination.url).origin === location.origin) return; } catch (_) { return; }
-            if (getNavAction(e.destination.url) === 'BLOCK') { e.preventDefault(); return; }
+            try { if (new URL(e.destination.url).origin === location.origin) { PG('Navigation API: same-origin, allow'); return; } } catch (_) { return; }
+
+            const navAct = getNavAction(e.destination.url);
+            PG('Navigation API: getNavAction=', navAct);
+            if (navAct === 'BLOCK') { PG('Navigation API: navBlock BLOCK, prevent'); e.preventDefault(); return; }
 
             if (trustedUrlForNav) {
                 try {
                     if (new URL(e.destination.url).origin !== new URL(trustedUrlForNav).origin) {
+                        PG('Navigation API guard1: different origin trustedUrlForNav=', trustedUrlForNav, '→ waitReady');
                         if (waitReady(() => { bypassNext = true; origAssign ? origAssign.call(location, e.destination.url) : (location.href = e.destination.url); })) { e.preventDefault(); return; }
                         const a = getAction();
+                        PG('Navigation API guard1 (ready): action=', a);
                         if (a === 'ALLOW') return;
                         e.preventDefault();
                         if (a === 'ASK') askPopup(e.destination.url, '_self', '', true);
@@ -512,8 +585,10 @@
             if (trustedClick && trustedUrlForNav === null) {
                 try {
                     if (!trustedIframeOrigin || new URL(e.destination.url).origin !== trustedIframeOrigin) {
+                        PG('Navigation API guard2 (iframe): → waitReady');
                         if (waitReady(() => { bypassNext = true; origAssign ? origAssign.call(location, e.destination.url) : (location.href = e.destination.url); })) { e.preventDefault(); return; }
                         const a = getAction();
+                        PG('Navigation API guard2 (ready): action=', a);
                         if (a === 'ALLOW') return;
                         e.preventDefault();
                         if (a === 'ASK') askPopup(e.destination.url, '_self', '', true);
@@ -522,11 +597,13 @@
                 } catch (_) { }
             }
 
-            if (!isSiteBlocked()) return;
-            if (e.userInitiated) return;
+            if (!isSiteBlocked()) { PG('Navigation API: site not blocked, allow'); return; }
+            if (e.userInitiated) { PG('Navigation API: userInitiated, allow'); return; }
 
+            PG('Navigation API: fallthrough waitReady');
             if (waitReady(() => { bypassNext = true; origAssign ? origAssign.call(location, e.destination.url) : (location.href = e.destination.url); })) { e.preventDefault(); return; }
             const a = getAction();
+            PG('Navigation API fallthrough (ready): action=', a);
             if (a === 'BLOCK') { e.preventDefault(); return; }
             if (a === 'ASK') { e.preventDefault(); askPopup(e.destination.url, '_self', '', true); }
         });
@@ -539,6 +616,7 @@
     window.addEventListener('message', e => {
         if (e.source !== window || !e.data?.action) return;
         if (e.data.action === 'PG_DO_NAV') {
+            PG('PG_DO_NAV:', e.data.url);
             bypassNext = true;
             origAssign ? origAssign.call(location, e.data.url) : (location.href = e.data.url);
         }
@@ -595,17 +673,16 @@
         if (e.defaultPrevented && e.type !== 'mousedown') return;
 
         if (!e.isTrusted) {
-            if ((e.metaKey || e.ctrlKey) && e.type === 'click') {
-                stopEvent(e);
-                return;
-            }
+            if ((e.metaKey || e.ctrlKey) && e.type === 'click') { stopEvent(e); return; }
             if (e.button !== 0 && e.type !== 'mousedown') { stopEvent(e); return; }
             const a = e.composedPath().find(el => el.tagName === 'A');
             if (a?.href) {
+                PG('handleLink: synthetic click on <a> href=', a.href, 'ready=', _ready);
                 if (!isReady()) {
                     stopEvent(e);
                     const type = e.type;
                     _pendingFns.push(() => {
+                        PG('handleLink pendingFn: replaying', type, 'on <a>', a.href);
                         if (a.isConnected) {
                             if (type === 'click') a.click();
                             else if (type === 'auxclick') a.dispatchEvent(new MouseEvent('auxclick', { button: 1, bubbles: true }));
@@ -613,8 +690,9 @@
                     });
                     return;
                 }
-                if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
+                if (getNavAction(a.href) === 'BLOCK') { PG('handleLink: synthetic navBlock BLOCK, stop'); stopEvent(e); return; }
                 const act = crossOriginAction(a.href);
+                PG('handleLink: synthetic crossOriginAction=', act);
                 if (act === 'BLOCK') { stopEvent(e); return; }
                 if (act === 'ASK') { const hrefSnapshot = a.href; stopEvent(e); askPopup(hrefSnapshot, a.target || '_self', '', true); return; }
             }
@@ -624,13 +702,15 @@
         if (e.type === 'auxclick' && e.button !== 1) return;
         const a = e.composedPath().find(el => el.tagName === 'A');
         if (!a?.href || a.hasAttribute('download')) return;
-        if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
+        if (getNavAction(a.href) === 'BLOCK') { PG('handleLink: trusted navBlock BLOCK, stop'); stopEvent(e); return; }
 
         const forceNew = e.type === 'auxclick';
         if (!forceNew && !isNewTab(effectiveTarget(a))) {
             if (e.type === 'click' && popupBlocked) {
-                try { if (trustedUrl && new URL(a.href, location.href).href === trustedUrl) return; } catch (_) { }
+                PG('handleLink: trusted click, popupBlocked, checking same link');
+                try { if (trustedUrl && new URL(a.href, location.href).href === trustedUrl) { PG('handleLink: same trustedUrl, allow'); return; } } catch (_) { }
                 const act = crossOriginAction(a.href);
+                PG('handleLink: crossOriginAction after popupBlocked=', act);
                 if (act === 'BLOCK') { stopEvent(e); return; }
                 if (act === 'ASK') { const hrefSnapshot = a.href; stopEvent(e); askPopup(hrefSnapshot, '_self', '', true); return; }
             }
@@ -638,13 +718,15 @@
         }
 
         let act = crossOriginAction(a.href);
-        if (act === null) return; // same-origin _blank is fine
+        PG('handleLink: _blank/auxclick, crossOriginAction=', act, 'trustedUrl=', trustedUrl);
+        if (act === null) return;
 
         if (e.isTrusted) {
             try {
-                if (trustedUrl && new URL(a.href, location.href).href === trustedUrl) return; // legit click
+                if (trustedUrl && new URL(a.href, location.href).href === trustedUrl) { PG('handleLink: legit _blank click, allow'); return; }
             } catch (_) { }
             if (trustedUrl) {
+                PG('handleLink: trustedUrl mismatch, stopping + redirecting to trustedUrl');
                 stopEvent(e);
                 try {
                     if (new URL(trustedUrl).origin === location.origin) { origAssign.call(location, trustedUrl); return; }
@@ -787,7 +869,6 @@
         try { w.Object; } catch (_) { return; }
         protected_.add(w);
 
-        // Hook window.open
         try {
             const wOpen = w.open;
             Object.defineProperty(w, 'open', {
@@ -799,8 +880,11 @@
                     }
                     if (popupPending) { return fakeWindow; }
                     const targetUrl = url || 'about:blank';
-                    if (getNavAction(targetUrl) === 'BLOCK') return fakeWindow;
-                    // Safe non-http(s) schemes — pass through
+                    if (getNavAction(targetUrl) === 'BLOCK') {
+                        PG('protectWin window.open: navBlock BLOCK. trustedClick=', trustedClick);
+                        if (trustedClick && !isReplaying) { popupBlocked = true; replayAfterBlock(); }
+                        return fakeWindow;
+                    }
                     try { const proto = new URL(targetUrl).protocol; const SAFE = ['tel:', 'mailto:', 'callto:', 'sms:', 'ms-windows-store:', 'itms:', 'itms-apps:', 'market:']; if (SAFE.includes(proto)) return wOpen.call(w, url, name, specs); } catch (_) { }
                     if (targetUrl !== 'about:blank') {
                         try {
@@ -831,7 +915,6 @@
             });
         } catch (_) { }
 
-        // Attach listeners to child doc
         try {
             const d = w.document;
             attachListeners(d);
@@ -903,4 +986,5 @@
         }
     }).observe(document, { childList: true, subtree: true });
 
+    PG('inject.js loaded on', location.href, '| _ready=', _ready);
 })();
