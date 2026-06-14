@@ -385,7 +385,18 @@
             if (new URL(url, location.href).origin === location.origin) { doNav(url); return; }
         } catch (_) { doNav(url); return; }
 
-        if (getNavAction(url) === 'BLOCK') return;
+        if (getNavAction(url) === 'BLOCK') {
+            // Navigation blocked - retry with original trusted URL if available
+            if (trustedClick && trustedUrlForNav) {
+                setTimeout(() => {
+                    if (popupPending) return;
+                    bypassNext = true;
+                    try { origAssign ? origAssign.call(location, trustedUrlForNav) : (location.href = trustedUrlForNav); }
+                    catch (_) { location.href = trustedUrlForNav; }
+                }, 50);
+            }
+            return;
+        }
 
         // Guard 1: user clicked a link but navigation goes to different origin
         if (trustedUrlForNav) {
