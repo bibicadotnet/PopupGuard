@@ -31,9 +31,38 @@
     const _pendingOpens = [];
     const _pendingFns = [];
 
+    // ── Saved originals for full uninstall on ALLOW sites ─────────────────────
+    const _orig = {};
+
+    const uninstall = () => {
+        try { if (_orig.windowOpen) Object.defineProperty(Window.prototype, 'open', { value: _orig.windowOpen, writable: true, configurable: true }); } catch (_) {}
+        try { if (_orig.windowOpen) Object.defineProperty(window, 'open', { value: _orig.windowOpen, writable: true, configurable: true }); } catch (_) {}
+        try { if (_orig.assign) Object.defineProperty(Location.prototype, 'assign', { value: _orig.assign, writable: true, configurable: true }); } catch (_) {}
+        try { if (_orig.replace) Object.defineProperty(Location.prototype, 'replace', { value: _orig.replace, writable: true, configurable: true }); } catch (_) {}
+        try { if (_orig.hrefDesc) Object.defineProperty(Location.prototype, 'href', _orig.hrefDesc); } catch (_) {}
+        try { if (_orig.etDispatch) EventTarget.prototype.dispatchEvent = _orig.etDispatch; } catch (_) {}
+        try { if (_orig.nodeDispatch) Node.prototype.dispatchEvent = _orig.nodeDispatch; } catch (_) {}
+        try { if (_orig.htmlDispatch) HTMLElement.prototype.dispatchEvent = _orig.htmlDispatch; } catch (_) {}
+        try { if (_orig.anchorDispatch && window.HTMLAnchorElement) HTMLAnchorElement.prototype.dispatchEvent = _orig.anchorDispatch; } catch (_) {}
+        try { if (_orig.htmlClick) HTMLElement.prototype.click = _orig.htmlClick; } catch (_) {}
+        try { if (_orig.anchorClick && window.HTMLAnchorElement) HTMLAnchorElement.prototype.click = _orig.anchorClick; } catch (_) {}
+        try { if (_orig.submit) HTMLFormElement.prototype.submit = _orig.submit; } catch (_) {}
+        try { if (_orig.requestSubmit) HTMLFormElement.prototype.requestSubmit = _orig.requestSubmit; } catch (_) {}
+        try { if (_orig.createElement) document.createElement = _orig.createElement; } catch (_) {}
+        try { if (_orig.iframeCW) Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', _orig.iframeCW); } catch (_) {}
+        try { if (_orig.iframeCD) Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', _orig.iframeCD); } catch (_) {}
+        try { if (window.HTMLFrameElement && _orig.frameCW) Object.defineProperty(HTMLFrameElement.prototype, 'contentWindow', _orig.frameCW); } catch (_) {}
+        try { if (window.HTMLFrameElement && _orig.frameCD) Object.defineProperty(HTMLFrameElement.prototype, 'contentDocument', _orig.frameCD); } catch (_) {}
+        try { document.removeEventListener('mousedown', handleLink, true); } catch (_) {}
+        try { document.removeEventListener('click', handleLink, true); } catch (_) {}
+        try { document.removeEventListener('auxclick', handleLink, true); } catch (_) {}
+        try { document.removeEventListener('submit', handleSubmit, true); } catch (_) {}
+    };
+
     const _readyObs = new MutationObserver(() => {
         if (!isReady()) return;
         _readyObs.disconnect();
+        if (getAction() === 'ALLOW') { uninstall(); return; }
         for (const item of _pendingOpens.splice(0)) item.resolve(interceptedOpen(item.url, item.name, item.specs));
         for (const fn of _pendingFns.splice(0)) fn();
     });
@@ -264,6 +293,7 @@
     // ── window.open intercept ─────────────────────────────────────────────────
 
     const originalOpen = window.open;
+    _orig.windowOpen = originalOpen;
 
     const fakeWindow = Object.freeze({
         closed: true, name: '',
@@ -443,6 +473,9 @@
     const locProto = Location.prototype;
     const origAssign = locProto.assign;
     const origReplace = locProto.replace;
+    _orig.assign = origAssign;
+    _orig.replace = origReplace;
+    _orig.hrefDesc = Object.getOwnPropertyDescriptor(locProto, 'href');
 
     try { Object.defineProperty(locProto, 'assign', { value: function (url) { interceptNav(String(url), u => origAssign.call(this, u)); }, writable: true, configurable: true }); } catch (_) { }
     try { Object.defineProperty(locProto, 'replace', { value: function (url) { interceptNav(String(url), u => origReplace.call(this, u)); }, writable: true, configurable: true }); } catch (_) { }
@@ -734,6 +767,12 @@
         proto.click._pg = true;
     };
 
+    _orig.etDispatch = EventTarget.prototype.dispatchEvent;
+    _orig.nodeDispatch = Node.prototype.dispatchEvent;
+    _orig.htmlDispatch = HTMLElement.prototype.dispatchEvent;
+    if (window.HTMLAnchorElement) _orig.anchorDispatch = HTMLAnchorElement.prototype.dispatchEvent;
+    _orig.htmlClick = HTMLElement.prototype.click;
+    if (window.HTMLAnchorElement) _orig.anchorClick = HTMLAnchorElement.prototype.click;
     hookDispatch(EventTarget.prototype);
     hookDispatch(Node.prototype);
     hookDispatch(HTMLElement.prototype);
@@ -744,6 +783,8 @@
     // ── Form.submit / requestSubmit hooks ────────────────────────────────────
 
     const origSubmit = HTMLFormElement.prototype.submit;
+    _orig.submit = origSubmit;
+    if (HTMLFormElement.prototype.requestSubmit) _orig.requestSubmit = HTMLFormElement.prototype.requestSubmit;
     HTMLFormElement.prototype.submit = function () {
         if (popupPending) { return; }
         if (this.action) {
@@ -880,6 +921,12 @@
         } catch (_) { }
     };
 
+    _orig.iframeCW = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    _orig.iframeCD = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
+    if (window.HTMLFrameElement) {
+        _orig.frameCW = Object.getOwnPropertyDescriptor(HTMLFrameElement.prototype, 'contentWindow');
+        _orig.frameCD = Object.getOwnPropertyDescriptor(HTMLFrameElement.prototype, 'contentDocument');
+    }
     hookProp(HTMLIFrameElement.prototype, 'contentWindow', w => w);
     hookProp(HTMLIFrameElement.prototype, 'contentDocument', d => d?.defaultView);
     if (window.HTMLFrameElement) {
@@ -889,6 +936,7 @@
 
     try {
         const origCreateElement = document.createElement;
+        _orig.createElement = origCreateElement;
         document.createElement = function (tagName, options) {
             const el = origCreateElement.call(this, tagName, options);
             if (el && typeof tagName === 'string' && (tagName.toLowerCase() === 'iframe' || tagName.toLowerCase() === 'frame')) {
