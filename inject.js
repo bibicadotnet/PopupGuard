@@ -350,7 +350,10 @@
     };
 
     try {
-        Object.defineProperty(window, 'open', { get: () => interceptedOpen, set: () => { }, configurable: true });
+        Object.defineProperty(Window.prototype, 'open', { value: interceptedOpen, writable: false, configurable: false });
+    } catch (_) { }
+    try {
+        Object.defineProperty(window, 'open', { get: () => interceptedOpen, set: () => { }, configurable: false });
     } catch (_) { window.open = interceptedOpen; }
 
     // ── Navigation intercept ──────────────────────────────────────────────────
@@ -611,9 +614,10 @@
                     return;
                 }
                 if (getNavAction(a.href) === 'BLOCK') { stopEvent(e); return; }
-                const act = crossOriginAction(a.href);
+                const isNew = isNewTab(effectiveTarget(a));
+                const act = isNew ? getAction() : crossOriginAction(a.href);
                 if (act === 'BLOCK') { stopEvent(e); return; }
-                if (act === 'ASK') { const hrefSnapshot = a.href; stopEvent(e); askPopup(hrefSnapshot, a.target || '_self', '', true); return; }
+                if (act === 'ASK') { const hrefSnapshot = a.href; stopEvent(e); askPopup(hrefSnapshot, a.target || (isNew ? '_blank' : '_self'), '', true); return; }
             }
             return;
         }
@@ -702,9 +706,10 @@
                 if (tgt.tagName !== 'A' && e.composedPath) tgt = e.composedPath().find(el => el.tagName === 'A') || this;
                 if (tgt.tagName === 'A' && tgt.href && !tgt.hasAttribute('download')) {
                     if (getNavAction(tgt.href) === 'BLOCK') return false;
-                    const act = crossOriginAction(tgt.href);
+                    const isNew = isNewTab(effectiveTarget(tgt));
+                    const act = isNew ? getAction() : crossOriginAction(tgt.href);
                     if (act === 'BLOCK') return false;
-                    if (act === 'ASK') { const url = tgt.href; const tgt2 = tgt.target; askPopup(url, tgt2 || '_self', ''); return false; }
+                    if (act === 'ASK') { const url = tgt.href; const tgt2 = tgt.target; askPopup(url, tgt2 || (isNew ? '_blank' : '_self'), ''); return false; }
                 }
             }
             return orig.apply(this, args);
@@ -719,9 +724,10 @@
             if (popupPending) { return; }
             if (this.tagName === 'A' && this.href && !this.hasAttribute('download')) {
                 if (getNavAction(this.href) === 'BLOCK') return;
-                const act = crossOriginAction(this.href);
+                const isNew = isNewTab(effectiveTarget(this));
+                const act = isNew ? getAction() : crossOriginAction(this.href);
                 if (act === 'BLOCK') return;
-                if (act === 'ASK') { const url = this.href; const target = this.target; askPopup(url, target || '_self', ''); return; }
+                if (act === 'ASK') { const url = this.href; const target = this.target; askPopup(url, target || (isNew ? '_blank' : '_self'), ''); return; }
             }
             return orig.call(this);
         };
@@ -784,50 +790,57 @@
         try { w.Object; } catch (_) { return; }
         protected_.add(w);
 
-        // Hook window.open
+        // Hook window.open on child window's Window prototype
         try {
             const wOpen = w.open;
+            const wInterceptedOpen = function (url, name, specs) {
+                if (name && typeof name === 'string') {
+                    try { if (w.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
+                    try { if (w.parent.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
+                    try { if (w.top.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
+                }
+                if (popupPending) { return fakeWindow; }
+                const targetUrl = url || 'about:blank';
+                if (getNavAction(targetUrl) === 'BLOCK') {
+                    if (trustedClick && !isReplaying) { popupBlocked = true; replayAfterBlock(); }
+                    return fakeWindow;
+                }
+                // Safe non-http(s) schemes — pass through
+                try { const proto = new URL(targetUrl).protocol; const SAFE = ['tel:', 'mailto:', 'callto:', 'sms:', 'ms-windows-store:', 'itms:', 'itms-apps:', 'market:']; if (SAFE.includes(proto)) return wOpen.call(w, url, name, specs); } catch (_) { }
+                if (targetUrl !== 'about:blank') {
+                    try {
+                        const dest = new URL(targetUrl, location.href);
+                        if (dest.origin === getTopOrigin()) {
+                            const isStd = !name || ['_blank', '_self', '_top', '_parent', '_new'].includes(name);
+                            if (trustedClick && isStd) { popupOpened = true; return wOpen.call(w, url, name, specs); }
+                            if (trustedClick) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); return fakeWindow; }
+                            if (getAction() === 'BLOCK') return fakeWindow;
+                            askPopup(targetUrl, name, specs);
+                            return fakeWindow;
+                        }
+                    } catch (_) { }
+                }
+                const action = getAction();
+                if (trustedClick && action === 'ASK' && trustedUrl) {
+                    try {
+                        const dest = new URL(targetUrl, location.href);
+                        const trusted = new URL(trustedUrl);
+                        if (dest.origin === trusted.origin && dest.pathname === trusted.pathname) { popupOpened = true; return wOpen.call(w, url, name, specs); }
+                    } catch (_) { }
+                }
+                if (action === 'BLOCK') { if (trustedClick) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); } return fakeWindow; }
+                if (action === 'ASK') { popupBlocked = true; askPopup(targetUrl, name, specs); return fakeWindow; }
+                return wOpen.call(w, url, name, specs);
+            };
+
+            if (w.Window?.prototype) {
+                try {
+                    Object.defineProperty(w.Window.prototype, 'open', { value: wInterceptedOpen, writable: false, configurable: false });
+                } catch (_) { }
+            }
             Object.defineProperty(w, 'open', {
-                get: () => function (url, name, specs) {
-                    if (name && typeof name === 'string') {
-                        try { if (w.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
-                        try { if (w.parent.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
-                        try { if (w.top.frames[name]) return wOpen.call(w, url, name, specs); } catch (_) { }
-                    }
-                    if (popupPending) { return fakeWindow; }
-                    const targetUrl = url || 'about:blank';
-                    if (getNavAction(targetUrl) === 'BLOCK') {
-                        if (trustedClick && !isReplaying) { popupBlocked = true; replayAfterBlock(); }
-                        return fakeWindow;
-                    }
-                    // Safe non-http(s) schemes — pass through
-                    try { const proto = new URL(targetUrl).protocol; const SAFE = ['tel:', 'mailto:', 'callto:', 'sms:', 'ms-windows-store:', 'itms:', 'itms-apps:', 'market:']; if (SAFE.includes(proto)) return wOpen.call(w, url, name, specs); } catch (_) { }
-                    if (targetUrl !== 'about:blank') {
-                        try {
-                            const dest = new URL(targetUrl, location.href);
-                            if (dest.origin === getTopOrigin()) {
-                                const isStd = !name || ['_blank', '_self', '_top', '_parent', '_new'].includes(name);
-                                if (trustedClick && isStd) { popupOpened = true; return wOpen.call(w, url, name, specs); }
-                                if (trustedClick) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); return fakeWindow; }
-                                if (getAction() === 'BLOCK') return fakeWindow;
-                                askPopup(targetUrl, name, specs);
-                                return fakeWindow;
-                            }
-                        } catch (_) { }
-                    }
-                    const action = getAction();
-                    if (trustedClick && action === 'ASK' && trustedUrl) {
-                        try {
-                            const dest = new URL(targetUrl, location.href);
-                            const trusted = new URL(trustedUrl);
-                            if (dest.origin === trusted.origin && dest.pathname === trusted.pathname) { popupOpened = true; return wOpen.call(w, url, name, specs); }
-                        } catch (_) { }
-                    }
-                    if (action === 'BLOCK') { if (trustedClick) { popupBlocked = true; if (!isReplaying) replayAfterBlock(); } return fakeWindow; }
-                    if (action === 'ASK') { popupBlocked = true; askPopup(targetUrl, name, specs); return fakeWindow; }
-                    return wOpen.call(w, url, name, specs);
-                },
-                set: () => { }, configurable: true
+                get: () => wInterceptedOpen,
+                set: () => { }, configurable: false
             });
         } catch (_) { }
 
@@ -873,6 +886,28 @@
         hookProp(HTMLFrameElement.prototype, 'contentWindow', w => w);
         hookProp(HTMLFrameElement.prototype, 'contentDocument', d => d?.defaultView);
     }
+
+    try {
+        const origCreateElement = document.createElement;
+        document.createElement = function (tagName, options) {
+            const el = origCreateElement.call(this, tagName, options);
+            if (el && typeof tagName === 'string' && (tagName.toLowerCase() === 'iframe' || tagName.toLowerCase() === 'frame')) {
+                try {
+                    Object.defineProperty(el, 'contentWindow', {
+                        get() {
+                            const desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow') ||
+                                Object.getOwnPropertyDescriptor(HTMLFrameElement.prototype, 'contentWindow');
+                            const w = desc?.get ? desc.get.call(el) : el.contentWindow;
+                            if (w) protectWin(w);
+                            return w;
+                        },
+                        configurable: true, enumerable: true
+                    });
+                } catch (_) { }
+            }
+            return el;
+        };
+    } catch (_) { }
 
     const protectIframe = el => {
         if (el.tagName !== 'IFRAME' && el.tagName !== 'FRAME') return;

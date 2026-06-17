@@ -26,6 +26,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.action === 'CHECK_DOWNLOAD') {
+        if (!msg.url || (!msg.url.startsWith('http://') && !msg.url.startsWith('https://'))) {
+            sendResponse({ isDownload: false });
+            return true;
+        }
         fetch(msg.url, { method: 'HEAD' })
             .then(r => {
                 const ct = (r.headers.get('content-type') || '').toLowerCase();
@@ -35,7 +39,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const isDownload = isAttachment || (!isHtml && ct !== '');
                 sendResponse({ isDownload });
             })
-            .catch(() => sendResponse({ isDownload: false }));
+            .catch(() => {
+                sendResponse({ isDownload: false });
+            });
         return true;
     }
 });
